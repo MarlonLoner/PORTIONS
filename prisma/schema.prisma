@@ -1,0 +1,249 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PatientStatus {
+  ACTIVE
+  DUE_SOON
+  OVERDUE
+  LOST
+  VIP
+}
+
+enum RiskScore {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum PackageType {
+  STANDARD
+  PREMIUM
+  FAMILY_PACK
+  CORPORATE
+  CHRONIC_PLUS
+}
+
+enum FollowUpType {
+  DUE_TODAY
+  OVERDUE
+  PRESCRIPTION_RENEWAL_NEEDED
+  PAYMENT_PENDING
+  DELIVERY_CONFIRMATION
+  LOST_PATIENT_REVIVAL
+}
+
+enum FollowUpStatus {
+  PENDING
+  DONE
+  SNOOZED
+}
+
+enum OrderSource {
+  WHATSAPP
+  WEBSITE
+  APP
+  WALK_IN
+  DIASPORA
+}
+
+enum OrderStatus {
+  NEW
+  PHARMACIST_REVIEW
+  QUOTED
+  AWAITING_PAYMENT
+  PAID
+  PACKED
+  DISPATCHED
+  DELIVERED
+  CANCELLED
+}
+
+enum OrderType {
+  PRESCRIPTION
+  REFILL
+  OTC
+  FAMILY_PACK
+}
+
+enum StockStatus {
+  HEALTHY
+  LOW_STOCK
+  OVERSTOCK
+  NEAR_EXPIRY
+  DEAD_STOCK
+}
+
+enum ReportType {
+  DAILY_EXECUTIVE
+  WEEKLY_BRANCH
+  CHRONIC_RETENTION
+  ONLINE_SALES
+  STOCK_RISK
+  STAFF_FOLLOW_UP
+}
+
+model Branch {
+  id                 String         @id @default(cuid())
+  name               String         @unique
+  area               String
+  managerName        String?
+  revenueTarget      Decimal        @default(0) @db.Decimal(12, 2)
+  staffResponseScore Int            @default(90)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  staffMembers       StaffMember[]
+  patients           Patient[]
+  refillEvents       RefillEvent[]
+  followUpTasks      FollowUpTask[]
+  orders             Order[]
+  stockItems         StockItem[]
+}
+
+model StaffMember {
+  id            String         @id @default(cuid())
+  name          String
+  role          String
+  phone         String
+  email         String?
+  branchId      String?
+  branch        Branch?        @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  patients      Patient[]      @relation("AssignedPatients")
+  followUpTasks FollowUpTask[]
+  orders        Order[]
+  refillEvents  RefillEvent[]
+}
+
+model Patient {
+  id                String              @id @default(cuid())
+  name              String
+  phone             String
+  branchId          String
+  branch            Branch              @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  conditionCategory String
+  packageType       PackageType
+  medicationCycle   String
+  nextRefillDate    DateTime
+  status            PatientStatus
+  assignedStaffId   String?
+  assignedStaff     StaffMember?        @relation("AssignedPatients", fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  lastContactedAt   DateTime?
+  riskScore         RiskScore
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  medications       PatientMedication[]
+  refillEvents      RefillEvent[]
+  followUpTasks     FollowUpTask[]
+  orders            Order[]
+}
+
+model PatientMedication {
+  id        String   @id @default(cuid())
+  patientId String
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  name      String
+  dosage    String
+  frequency String
+  category  String
+  notes     String?
+  createdAt DateTime @default(now())
+}
+
+model RefillEvent {
+  id          String       @id @default(cuid())
+  patientId   String
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  branchId    String
+  branch      Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  handledById String?
+  handledBy   StaffMember? @relation(fields: [handledById], references: [id], onDelete: SetNull)
+  refillDate  DateTime
+  status      String
+  amount      Decimal      @default(0) @db.Decimal(12, 2)
+  notes       String?
+  createdAt   DateTime     @default(now())
+}
+
+model FollowUpTask {
+  id               String         @id @default(cuid())
+  patientId        String?
+  patient          Patient?       @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  customerName     String
+  type             FollowUpType
+  status           FollowUpStatus @default(PENDING)
+  reason           String
+  branchId         String
+  branch           Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  dueDate          DateTime
+  suggestedAction  String
+  suggestedMessage String
+  assignedStaffId  String?
+  assignedStaff    StaffMember?   @relation(fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+}
+
+model Order {
+  id                    String       @id @default(cuid())
+  customerName          String
+  phone                 String
+  source                OrderSource
+  branchId              String
+  branch                Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  type                  OrderType
+  status                OrderStatus
+  amount                Decimal      @default(0) @db.Decimal(12, 2)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  assignedStaffId       String?
+  assignedStaff         StaffMember? @relation(fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  patientId             String?
+  patient               Patient?     @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  paymentStatus         String
+  fulfillmentPreference String
+  internalNotes         String?
+  items                 OrderItem[]
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId     String
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productName String
+  category    String
+  quantity    Int
+  unitPrice   Decimal @db.Decimal(12, 2)
+}
+
+model StockItem {
+  id              String      @id @default(cuid())
+  productName     String
+  category        String
+  branchId        String
+  branch          Branch      @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  stockLevel      Int
+  reorderLevel    Int
+  status          StockStatus
+  expiryDate      DateTime?
+  suggestedAction String
+  valueAtRisk     Decimal     @default(0) @db.Decimal(12, 2)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model Report {
+  id              String     @id @default(cuid())
+  type            ReportType
+  title           String
+  description     String
+  lastGeneratedAt DateTime
+  keyMetric       String
+  createdAt       DateTime   @default(now())
+}
