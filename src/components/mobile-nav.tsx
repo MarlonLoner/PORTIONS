@@ -8,6 +8,7 @@ import {
   ClipboardList,
   LayoutDashboard,
   PackageSearch,
+  Presentation,
   Settings,
   ShoppingBag,
   UsersRound
@@ -17,6 +18,7 @@ import { usePathname } from "next/navigation";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/demo", label: "Demo", icon: Presentation },
   { href: "/patients", label: "Patients", icon: UsersRound },
   { href: "/follow-ups", label: "Follow-Ups", icon: ClipboardList },
   { href: "/orders", label: "Orders", icon: ShoppingBag },

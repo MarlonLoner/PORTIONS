@@ -518,3 +518,16 @@ export async function getSettingsData() {
     branding: ["Deep navy sidebar", "Clinical blue highlights", "Emerald success accents"]
   };
 }
+
+export async function getDemoData() {
+  const [dashboard, branches, stock, orders, patients, followUps] = await Promise.all([
+    getDashboardData(),
+    getBranchOverview(),
+    getStockData(),
+    prisma.order.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.patient.findMany({ orderBy: { nextRefillDate: "asc" } }),
+    prisma.followUpTask.findMany({ orderBy: { dueDate: "asc" } })
+  ]);
+
+  return { dashboard, branches, stock, orders, patients, followUps };
+}
