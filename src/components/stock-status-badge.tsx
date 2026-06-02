@@ -13,7 +13,7 @@ export function StockStatusBadge({ status }: { status: string }) {
   return (
     <span
       className={clsx(
-        "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1",
+        "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] ring-1",
         classes[status] ?? "bg-slate-100 text-slate-700 ring-slate-200"
       )}
     >

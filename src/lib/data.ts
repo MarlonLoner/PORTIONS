@@ -12,6 +12,19 @@ import {
 } from "@prisma/client";
 import { buildBranchCommand } from "@/lib/branches";
 import { prisma } from "@/lib/prisma";
+import {
+  calculateTotalStockValue,
+  calculateEstimatedStockValue,
+  getChronicDemandRisk,
+  getDeadStockItems,
+  getLowStockItems,
+  getNearExpiryItems,
+  getOverstockItems,
+  getReorderUrgency,
+  getStockRiskLevel,
+  getStockAiSummary,
+  getSuggestedTransfers
+} from "@/lib/stock";
 
 export const patientStatusOptions = Object.values(PatientStatus);
 export const packageTypeOptions = Object.values(PackageType);
@@ -20,6 +33,7 @@ export const followUpTypeOptions = Object.values(FollowUpType);
 export const orderStatusOptions = Object.values(OrderStatus);
 export const orderSourceOptions = Object.values(OrderSource);
 export const orderTypeOptions = Object.values(OrderType);
+export const stockStatusOptions = Object.values(StockStatus);
 
 const paidStatuses = new Set<OrderStatus>([
   OrderStatus.PAID,
@@ -354,22 +368,78 @@ export async function getBranchDetail(id: string) {
   };
 }
 
-export async function getStockData() {
-  const [stockItems, patients] = await Promise.all([
+export async function getStockData(filters: {
+  branchId?: string;
+  category?: string;
+  status?: string;
+  expiryRisk?: string;
+} = {}) {
+  const where: Prisma.StockItemWhereInput = {};
+
+  if (filters.branchId) where.branchId = filters.branchId;
+  if (filters.category) where.category = filters.category;
+  if (filters.status) where.status = filters.status as StockStatus;
+
+  const [stockItemsRaw, allStockItemsRaw, patients, branches] = await Promise.all([
+    prisma.stockItem.findMany({
+      where,
+      include: { branch: true },
+      orderBy: [{ status: "asc" }, { productName: "asc" }]
+    }),
     prisma.stockItem.findMany({
       include: { branch: true },
       orderBy: [{ status: "asc" }, { productName: "asc" }]
     }),
-    prisma.patient.findMany()
+    prisma.patient.findMany({ include: { branch: true } }),
+    prisma.branch.findMany({ orderBy: { name: "asc" } })
   ]);
+
+  const expiryFilteredStockItems =
+    filters.expiryRisk === "near"
+      ? stockItemsRaw.filter((item) => item.expiryDate && item.expiryDate.getTime() - Date.now() <= 60 * 86_400_000)
+      : filters.expiryRisk === "expired"
+        ? stockItemsRaw.filter((item) => item.expiryDate && item.expiryDate.getTime() < Date.now())
+        : stockItemsRaw;
+  const stockItems = expiryFilteredStockItems.map((item) => ({
+    ...item,
+    estimatedStockValue: calculateEstimatedStockValue(item),
+    riskLevel: getStockRiskLevel(item)
+  }));
+  const allStockItems = allStockItemsRaw.map((item) => ({
+    ...item,
+    estimatedStockValue: calculateEstimatedStockValue(item),
+    riskLevel: getStockRiskLevel(item)
+  }));
+  const categories = Array.from(new Set(allStockItemsRaw.map((item) => item.category))).sort();
+  const lowStockItems = getLowStockItems(allStockItemsRaw);
+  const nearExpiryItems = getNearExpiryItems(allStockItemsRaw);
+  const overstockItems = getOverstockItems(allStockItemsRaw);
+  const deadStockItems = getDeadStockItems(allStockItemsRaw);
+  const chronicDemandRisk = getChronicDemandRisk(allStockItemsRaw, patients);
+  const suggestedTransfers = getSuggestedTransfers(allStockItemsRaw);
 
   return {
     stockItems,
+    allStockItems,
+    branches,
+    categories,
+    lowStockItems,
+    nearExpiryItems,
+    overstockItems,
+    deadStockItems,
+    chronicDemandRisk,
+    suggestedTransfers,
+    aiSummaries: getStockAiSummary(allStockItemsRaw, patients),
     smartCards: {
-      lowStockRisks: stockItems.filter((item) => item.status === StockStatus.LOW_STOCK).length,
-      nearExpiryValue: sumMoney(stockItems.filter((item) => item.status === StockStatus.NEAR_EXPIRY), (item) => item.valueAtRisk),
+      totalStockValue: calculateTotalStockValue(allStockItemsRaw),
+      lowStockRisks: lowStockItems.length,
+      nearExpiryValue: nearExpiryItems.reduce((sum, item) => sum + Number(item.valueAtRisk), 0),
+      overstockItems: overstockItems.length,
+      deadStockItems: deadStockItems.length,
       chronicDemandForecast: patients.filter((patient) => patient.nextRefillDate >= startOfToday() && patient.nextRefillDate < new Date(Date.now() + 7 * 86_400_000)).length,
-      suggestedBranchTransfers: stockItems.filter((item) => item.status === StockStatus.OVERSTOCK).length
+      chronicDemandRisk: chronicDemandRisk.length,
+      suggestedBranchTransfers: suggestedTransfers.length,
+      reorderUrgency: getReorderUrgency(allStockItemsRaw)
     }
   };
 }
