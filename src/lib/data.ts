@@ -488,11 +488,22 @@ export async function getReportsData() {
 export async function getSettingsData() {
   const [branches, staff] = await Promise.all([
     prisma.branch.findMany({
-      include: { staffMembers: true },
+      include: {
+        staffMembers: true,
+        patients: true,
+        orders: true,
+        stockItems: true,
+        followUpTasks: true
+      },
       orderBy: { name: "asc" }
     }),
     prisma.staffMember.findMany({
-      include: { branch: true },
+      include: {
+        branch: true,
+        patients: true,
+        followUpTasks: true,
+        orders: true
+      },
       orderBy: { name: "asc" }
     })
   ]);
