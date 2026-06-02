@@ -3,6 +3,7 @@ import {
   FollowUpType,
   OrderSource,
   OrderStatus,
+  OrderType,
   PackageType,
   PatientStatus,
   Prisma,
@@ -16,6 +17,8 @@ export const packageTypeOptions = Object.values(PackageType);
 export const riskScoreOptions = Object.values(RiskScore);
 export const followUpTypeOptions = Object.values(FollowUpType);
 export const orderStatusOptions = Object.values(OrderStatus);
+export const orderSourceOptions = Object.values(OrderSource);
+export const orderTypeOptions = Object.values(OrderType);
 
 const paidStatuses = new Set<OrderStatus>([
   OrderStatus.PAID,
@@ -240,14 +243,41 @@ export async function getFollowUpQueueData() {
   };
 }
 
-export async function getOrders() {
-  return prisma.order.findMany({
-    include: {
-      branch: true,
-      assignedStaff: true
-    },
-    orderBy: { createdAt: "desc" }
-  });
+export async function getOrders(filters: {
+  status?: string;
+  source?: string;
+  branchId?: string;
+  type?: string;
+} = {}) {
+  const where: Prisma.OrderWhereInput = {};
+
+  if (filters.status) where.status = filters.status as OrderStatus;
+  if (filters.source) where.source = filters.source as OrderSource;
+  if (filters.branchId) where.branchId = filters.branchId;
+  if (filters.type) where.type = filters.type as OrderType;
+
+  const [orders, allOrders, branches] = await Promise.all([
+    prisma.order.findMany({
+      where,
+      include: {
+        branch: true,
+        assignedStaff: true,
+        items: true
+      },
+      orderBy: { createdAt: "desc" }
+    }),
+    prisma.order.findMany({
+      include: {
+        branch: true,
+        assignedStaff: true,
+        items: true
+      },
+      orderBy: { createdAt: "desc" }
+    }),
+    prisma.branch.findMany({ orderBy: { name: "asc" } })
+  ]);
+
+  return { orders, allOrders, branches };
 }
 
 export async function getOrderDetail(id: string) {
