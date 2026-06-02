@@ -10,6 +10,7 @@ import {
   RiskScore,
   StockStatus
 } from "@prisma/client";
+import { buildBranchCommand } from "@/lib/branches";
 import { prisma } from "@/lib/prisma";
 
 export const patientStatusOptions = Object.values(PatientStatus);
@@ -303,14 +304,17 @@ export async function getBranchOverview() {
     orderBy: { name: "asc" }
   });
 
-  return branches.map(branchMetrics);
+  return branches.map(buildBranchCommand);
 }
 
 export async function getBranchDetail(id: string) {
   const branch = await prisma.branch.findUnique({
     where: { id },
     include: {
-      orders: { orderBy: { createdAt: "desc" } },
+      orders: {
+        include: { assignedStaff: true },
+        orderBy: { createdAt: "desc" }
+      },
       patients: true,
       followUpTasks: true,
       stockItems: true,
@@ -320,7 +324,7 @@ export async function getBranchDetail(id: string) {
 
   if (!branch) return null;
 
-  const metrics = branchMetrics(branch);
+  const metrics = buildBranchCommand(branch);
   const categoryRevenue = branch.orders.reduce<Record<string, number>>((result, order) => {
     const label = order.type;
     result[label] = (result[label] ?? 0) + Number(order.amount);
@@ -336,7 +340,17 @@ export async function getBranchDetail(id: string) {
         ? (branch.followUpTasks.filter((task) => task.status === FollowUpStatus.DONE).length / branch.followUpTasks.length) * 100
         : 0,
     onlineOrders: branch.orders.filter((order) => order.source !== OrderSource.WALK_IN),
-    stockIssues: branch.stockItems.filter((item) => item.status !== StockStatus.HEALTHY)
+    stockIssues: branch.stockItems.filter((item) => item.status !== StockStatus.HEALTHY),
+    ordersByStatus: Object.values(OrderStatus).map((status) => ({
+      status,
+      count: branch.orders.filter((order) => order.status === status).length,
+      value: branch.orders.filter((order) => order.status === status).reduce((sum, order) => sum + Number(order.amount), 0)
+    })),
+    patientsDueToday: branch.patients.filter((patient) => patient.nextRefillDate >= startOfToday() && patient.nextRefillDate < endOfToday()),
+    overduePatients: branch.patients.filter((patient) => patient.status === PatientStatus.OVERDUE || patient.nextRefillDate < startOfToday()),
+    highRiskPatients: branch.patients.filter((patient) => patient.riskScore === RiskScore.HIGH),
+    lowStockItems: branch.stockItems.filter((item) => item.status === StockStatus.LOW_STOCK),
+    nearExpiryItems: branch.stockItems.filter((item) => item.status === StockStatus.NEAR_EXPIRY)
   };
 }
 
