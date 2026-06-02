@@ -471,6 +471,20 @@ export async function getReports() {
   return prisma.report.findMany({ orderBy: { lastGeneratedAt: "desc" } });
 }
 
+export async function getReportsData() {
+  const [reports, dashboard, branches, stock, orders, patients, followUps] = await Promise.all([
+    getReports(),
+    getDashboardData(),
+    getBranchOverview(),
+    getStockData(),
+    prisma.order.findMany({ include: { branch: true, assignedStaff: true }, orderBy: { createdAt: "desc" } }),
+    prisma.patient.findMany({ include: { branch: true, refillEvents: true }, orderBy: { nextRefillDate: "asc" } }),
+    prisma.followUpTask.findMany({ include: { branch: true, assignedStaff: true }, orderBy: { dueDate: "asc" } })
+  ]);
+
+  return { reports, dashboard, branches, stock, orders, patients, followUps };
+}
+
 export async function getSettingsData() {
   const [branches, staff] = await Promise.all([
     prisma.branch.findMany({
