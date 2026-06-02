@@ -445,13 +445,26 @@ export async function getStockData(filters: {
 }
 
 export async function getAiBriefData() {
-  const [dashboard, branches, stock] = await Promise.all([
+  const [dashboard, branches, stock, orders, patients, followUps, rawBranches, stockItems] = await Promise.all([
     getDashboardData(),
     getBranchOverview(),
-    getStockData()
+    getStockData(),
+    prisma.order.findMany({ include: { branch: true }, orderBy: { createdAt: "desc" } }),
+    prisma.patient.findMany({ include: { branch: true, refillEvents: true } }),
+    prisma.followUpTask.findMany({ include: { branch: true, assignedStaff: true }, orderBy: { dueDate: "asc" } }),
+    prisma.branch.findMany({
+      include: {
+        orders: true,
+        patients: true,
+        followUpTasks: true,
+        stockItems: true
+      },
+      orderBy: { name: "asc" }
+    }),
+    prisma.stockItem.findMany({ include: { branch: true }, orderBy: [{ status: "asc" }, { productName: "asc" }] })
   ]);
 
-  return { dashboard, branches, stock };
+  return { dashboard, branches, stock, orders, patients, followUps, rawBranches, stockItems };
 }
 
 export async function getReports() {
