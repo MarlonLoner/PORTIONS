@@ -111,6 +111,7 @@ export default async function ImportBatchDetailPage({ params }: { params: Promis
         <ImportBatchDetailActions
           batchId={batch.id}
           initialNotes={batch.notes ?? ""}
+          templateType={batch.templateType}
           canExecute={executionEligibility.allowed}
           executionMessage={executionEligibility.reason}
           alreadyImported={Boolean(batch.importedAt)}
@@ -133,6 +134,11 @@ export default async function ImportBatchDetailPage({ params }: { params: Promis
               </p>
             ))}
           </div>
+          {batch.templateType === "chronic-patients" ? (
+            <p className="mt-4 rounded-lg bg-clinical-50 p-3 text-sm font-semibold leading-6 text-clinical-900">
+              Next operational action: review the Chronic Revenue Engine and Follow-Up Queue to confirm imported patients are visible for refill recovery.
+            </p>
+          ) : null}
         </section>
       ) : null}
 

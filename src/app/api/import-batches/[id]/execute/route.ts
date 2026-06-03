@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import {
   canExecuteImportBatch,
   executeBranchImport,
+  executeChronicPatientImport,
   executeStaffImport,
   getStoredRows
 } from "@/lib/import-execution";
@@ -29,6 +30,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   const result = await prisma.$transaction(async (tx) => {
     if (batch.templateType === "branches") {
       return executeBranchImport(tx, rows);
+    }
+
+    if (batch.templateType === "chronic-patients") {
+      return executeChronicPatientImport(tx, rows);
     }
 
     return executeStaffImport(tx, rows);

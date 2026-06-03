@@ -9,12 +9,14 @@ import { importBatchStatusClasses, importBatchStatusLabels, type ImportBatchStat
 export function ImportBatchDetailActions({
   batchId,
   initialNotes,
+  templateType,
   canExecute,
   executionMessage,
   alreadyImported
 }: {
   batchId: string;
   initialNotes: string;
+  templateType: string;
   canExecute: boolean;
   executionMessage: string;
   alreadyImported: boolean;
@@ -104,6 +106,16 @@ export function ImportBatchDetailActions({
               </p>
             ))}
           </div>
+          {templateType === "chronic-patients" ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link href="/patients" className="focus-ring rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white">
+                Review Chronic Revenue Engine
+              </Link>
+              <Link href="/follow-ups" className="focus-ring rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">
+                Review Follow-Up Queue
+              </Link>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>
