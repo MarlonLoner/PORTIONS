@@ -543,3 +543,9 @@ export async function getImportBatchesData() {
     orderBy: { createdAt: "desc" }
   });
 }
+
+export async function getImportBatchById(id: string) {
+  return prisma.importBatch.findUnique({
+    where: { id }
+  });
+}

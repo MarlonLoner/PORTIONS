@@ -50,6 +50,9 @@ export async function POST(request: Request) {
         numericWarningCount: numberValue(body.numericWarningCount),
         duplicateWarningCount: numberValue(body.duplicateWarningCount),
         branchWarningCount: numberValue(body.branchWarningCount),
+        rows: Array.isArray(body.rows) ? body.rows : undefined,
+        previewRows: Array.isArray(body.previewRows) ? body.previewRows : undefined,
+        rowIssues: Array.isArray(body.rowIssues) ? body.rowIssues : undefined,
         status: initialStatus(validationStatus, readinessScore, missingFields, issueCount),
         notes: cleanString(body.notes) || null
       }

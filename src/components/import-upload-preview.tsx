@@ -113,7 +113,10 @@ export function ImportUploadPreview({
         dateWarningCount: issueSummary.dateWarnings,
         numericWarningCount: issueSummary.numericWarnings,
         duplicateWarningCount: issueSummary.duplicateWarnings,
-        branchWarningCount: issueSummary.branchWarnings
+        branchWarningCount: issueSummary.branchWarnings,
+        rows,
+        previewRows,
+        rowIssues
       })
     });
 

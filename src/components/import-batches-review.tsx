@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckCircle2, Loader2 } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   getImportBatchAiSummary,
@@ -130,6 +131,9 @@ function BatchCard({ batch, busy, feedback, onUpdate }: { batch: ImportBatchReco
       </label>
 
       <div className="mt-4 flex flex-wrap gap-2">
+        <Link href={`/imports/batches/${batch.id}`} className="focus-ring inline-flex items-center rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-navy-800">
+          Review Batch
+        </Link>
         <Action label="Mark Needs Cleanup" status="NEEDS_CLEANUP" busy={busy} onClick={() => onUpdate(batch.id, { status: "NEEDS_CLEANUP" }, "Marked needs cleanup.")} />
         <Action label="Mark Ready" status="READY" busy={busy} onClick={() => onUpdate(batch.id, { status: "READY" }, "Marked ready.")} />
         <Action label="Mark Approved" status="APPROVED" busy={busy} onClick={() => onUpdate(batch.id, { status: "APPROVED" }, "Marked approved.")} />

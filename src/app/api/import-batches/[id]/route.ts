@@ -24,6 +24,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return NextResponse.json({ error: "Invalid import batch status." }, { status: 400 });
       }
       data.status = body.status;
+      if (body.status === ImportBatchStatus.APPROVED) data.approvedAt = new Date();
+      if (body.status === ImportBatchStatus.IMPORTED) data.importedAt = new Date();
     }
 
     if ("notes" in body) data.notes = cleanOptionalString(body.notes);

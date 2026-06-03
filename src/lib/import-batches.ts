@@ -3,6 +3,7 @@ export type ImportBatchStatusValue = (typeof importBatchStatuses)[number];
 export type ImportBatchPriority = "High" | "Medium" | "Standard";
 
 export type ImportBatchLike = {
+  id?: string;
   templateType: string;
   fileName: string;
   rowCount: number;
@@ -15,6 +16,11 @@ export type ImportBatchLike = {
   duplicateWarningCount: number;
   branchWarningCount: number;
   status: ImportBatchStatusValue | string;
+  rows?: unknown;
+  previewRows?: unknown;
+  rowIssues?: unknown;
+  approvedAt?: string | Date | null;
+  importedAt?: string | Date | null;
 };
 
 export const importBatchStatusLabels: Record<ImportBatchStatusValue, string> = {
@@ -86,4 +92,76 @@ export function getImportBatchMetrics(batches: ImportBatchLike[]) {
     averageReadinessScore,
     totalRowsReviewed: batches.reduce((sum, batch) => sum + batch.rowCount, 0)
   };
+}
+
+export function getImportBatchDetailSummary(batch: ImportBatchLike) {
+  return {
+    title: `${batch.templateType.replace(/-/g, " ")} import review`,
+    readiness: getBatchApprovalReadiness(batch),
+    priority: getImportBatchPriority(batch),
+    aiSummary: getBatchDetailAiSummary(batch),
+    nextActions: getBatchDetailNextActions(batch)
+  };
+}
+
+export function getStoredRowPreview(batch: ImportBatchLike, limit = 25) {
+  const rows = Array.isArray(batch.rows) ? batch.rows : Array.isArray(batch.previewRows) ? batch.previewRows : [];
+  return rows.slice(0, limit) as Array<Record<string, string>>;
+}
+
+export function getBatchIssueBreakdown(batch: ImportBatchLike) {
+  const issues = Array.isArray(batch.rowIssues) ? batch.rowIssues as Array<{ type?: string }> : [];
+  return {
+    emptyRequiredFields: issues.filter((issue) => issue.type === "empty").length,
+    dateWarnings: batch.dateWarningCount,
+    numericWarnings: batch.numericWarningCount,
+    duplicateWarnings: batch.duplicateWarningCount,
+    branchWarnings: batch.branchWarningCount,
+    totalIssues: batch.issueCount,
+    issues
+  };
+}
+
+export function getBatchApprovalReadiness(batch: ImportBatchLike) {
+  if (batch.missingFields.length > 0 || batch.validationStatus === "Invalid") return "Blocked";
+  if (batch.issueCount > 0) return "Needs Review";
+  if (batch.readinessScore >= 85) return "Ready for Approval";
+  return "Needs Cleanup";
+}
+
+export function getBatchDetailAiSummary(batch: ImportBatchLike) {
+  const readiness = getBatchApprovalReadiness(batch);
+  const template = batch.templateType.replace(/-/g, " ");
+
+  if (readiness === "Blocked") {
+    return `This ${template} batch is blocked because required fields are missing or the validation status is invalid. Fix the CSV structure before any pilot import approval.`;
+  }
+
+  if (readiness === "Needs Review") {
+    return `This ${template} batch has the required columns, but ${batch.issueCount} row-level issue${batch.issueCount === 1 ? "" : "s"} need review before approval. Focus on dates, numeric values, duplicates, and branch names.`;
+  }
+
+  if (batch.status === "APPROVED") {
+    return `This ${template} batch is approved for pilot import staging. It should remain unchanged until the implementation team schedules import execution.`;
+  }
+
+  if (batch.status === "IMPORTED") {
+    return `This ${template} batch is marked imported. Treat the stored rows and issues as the audit trail for pilot setup.`;
+  }
+
+  return `This ${template} batch is ready for import review. Required columns are present and no major cleanup blockers are visible.`;
+}
+
+export function getBatchDetailNextActions(batch: ImportBatchLike) {
+  const actions = [];
+
+  if (batch.missingFields.length > 0) actions.push("Add missing required fields to the source CSV and re-upload.");
+  if (batch.dateWarningCount > 0) actions.push("Correct date fields to YYYY-MM-DD.");
+  if (batch.numericWarningCount > 0) actions.push("Clean numeric fields such as stock levels, reorder levels, amounts, and cycle days.");
+  if (batch.duplicateWarningCount > 0) actions.push("Review duplicate phone numbers before approval.");
+  if (batch.branchWarningCount > 0) actions.push("Match branch names to configured PORTIONS branches.");
+  if (actions.length === 0 && batch.status !== "APPROVED" && batch.status !== "IMPORTED") actions.push("Confirm data owner and mark approved when ready.");
+  if (batch.status === "APPROVED") actions.push("Hold for scheduled pilot import execution.");
+
+  return actions;
 }

@@ -1,0 +1,6 @@
+ALTER TABLE "ImportBatch"
+ADD COLUMN "rows" JSONB,
+ADD COLUMN "previewRows" JSONB,
+ADD COLUMN "rowIssues" JSONB,
+ADD COLUMN "approvedAt" TIMESTAMP(3),
+ADD COLUMN "importedAt" TIMESTAMP(3);

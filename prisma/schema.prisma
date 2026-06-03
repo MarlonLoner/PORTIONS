@@ -305,6 +305,11 @@ model ImportBatch {
   branchWarningCount     Int
   status                 ImportBatchStatus @default(DRAFT)
   notes                  String?
+  rows                   Json?
+  previewRows            Json?
+  rowIssues              Json?
+  approvedAt             DateTime?
+  importedAt             DateTime?
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
 
