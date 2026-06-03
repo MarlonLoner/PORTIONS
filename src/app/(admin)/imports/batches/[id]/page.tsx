@@ -5,6 +5,12 @@ import { ImportBatchDetailActions } from "@/components/import-batch-detail-actio
 import { getImportBatchById } from "@/lib/data";
 import { formatDate } from "@/lib/format";
 import {
+  canExecuteImportBatch,
+  getImportExecutionSummary,
+  getImportExecutionWarnings,
+  type ImportRowResult
+} from "@/lib/import-execution";
+import {
   getBatchApprovalReadiness,
   getBatchDetailAiSummary,
   getBatchDetailNextActions,
@@ -35,6 +41,9 @@ export default async function ImportBatchDetailPage({ params }: { params: Promis
   const aiSummary = getBatchDetailAiSummary(batch);
   const nextActions = getBatchDetailNextActions(batch);
   const issues = Array.isArray(batch.rowIssues) ? batch.rowIssues as Array<{ rowNumber?: number; field?: string; message?: string; type?: string }> : [];
+  const executionEligibility = canExecuteImportBatch(batch);
+  const executionSummary = getImportExecutionSummary(batch);
+  const executionWarnings = getImportExecutionWarnings(batch);
 
   return (
     <div className="space-y-6">
@@ -99,8 +108,44 @@ export default async function ImportBatchDetailPage({ params }: { params: Promis
           </div>
         </Panel>
 
-        <ImportBatchDetailActions batchId={batch.id} initialNotes={batch.notes ?? ""} />
+        <ImportBatchDetailActions
+          batchId={batch.id}
+          initialNotes={batch.notes ?? ""}
+          canExecute={executionEligibility.allowed}
+          executionMessage={executionEligibility.reason}
+          alreadyImported={Boolean(batch.importedAt)}
+        />
       </section>
+
+      {batch.importedAt || executionSummary.rowResults.length > 0 ? (
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-700">Execution result</p>
+          <h2 className="mt-2 text-xl font-semibold tracking-tight text-navy-950">Imported Demo Records Summary</h2>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <Metric label="Imported count" value={String(executionSummary.importedRecordCount)} />
+            <Metric label="Skipped count" value={String(executionSummary.skippedRecordCount)} />
+            <Metric label="Failed count" value={String(executionSummary.failedRecordCount)} />
+          </div>
+          <div className="mt-5 max-h-72 overflow-auto rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
+            {executionSummary.rowResults.map((result: ImportRowResult) => (
+              <p key={`${result.rowNumber}-${result.recordType}-${result.name}-${result.action}`} className="text-sm leading-6 text-slate-700">
+                Row {result.rowNumber}: {result.action} {result.recordType} "{result.name}" - {result.reason}
+              </p>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {executionWarnings.length > 0 ? (
+        <section className="rounded-lg border border-amber-200 bg-amber-50 p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700">Execution warnings</p>
+          <div className="mt-3 space-y-2">
+            {executionWarnings.map((warning) => (
+              <p key={warning} className="text-sm font-semibold leading-6 text-amber-800">{warning}</p>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
         <div className="flex flex-wrap items-end justify-between gap-3">

@@ -310,6 +310,11 @@ model ImportBatch {
   rowIssues              Json?
   approvedAt             DateTime?
   importedAt             DateTime?
+  importResult           Json?
+  importedRecordCount    Int?
+  skippedRecordCount     Int?
+  failedRecordCount      Int?
+  executionNotes         String?
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
 
