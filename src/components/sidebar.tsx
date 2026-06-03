@@ -18,7 +18,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/demo", label: "Demo", icon: Presentation },
   { href: "/patients", label: "Chronic Patients", icon: UsersRound },
   { href: "/follow-ups", label: "Follow-Up Queue", icon: ClipboardList },
@@ -47,7 +47,7 @@ export function Sidebar() {
       <nav className="flex-1 space-y-1 px-4 py-4">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          const active = pathname.startsWith(item.href);
 
           return (
             <Link
@@ -68,7 +68,12 @@ export function Sidebar() {
       </nav>
       <div className="border-t border-white/10 p-5">
         <div className="rounded-lg bg-white/10 p-4">
-          <p className="text-sm font-semibold">Admin-ready structure</p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold">Admin-ready structure</p>
+            <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald-100 ring-1 ring-emerald-300/20">
+              Demo Mode
+            </span>
+          </div>
           <p className="mt-1 text-xs leading-5 text-slate-300">
             Routes live inside the admin shell so authentication can wrap this surface later.
           </p>

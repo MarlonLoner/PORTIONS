@@ -25,10 +25,15 @@ export function TopBar() {
             />
           </label>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-          <CalendarDays className="h-4 w-4 text-clinical-700" aria-hidden="true" />
-          <span className="hidden sm:inline">{date}</span>
-          <span className="sm:hidden">Today</span>
+        <div className="flex items-center gap-2">
+          <span className="hidden rounded-full bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-emerald-700 ring-1 ring-emerald-100 sm:inline-flex">
+            Demo Mode
+          </span>
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+            <CalendarDays className="h-4 w-4 text-clinical-700" aria-hidden="true" />
+            <span className="hidden sm:inline">{date}</span>
+            <span className="sm:hidden">Today</span>
+          </div>
         </div>
       </div>
       <div className="border-t border-slate-100 px-4 py-3 lg:hidden">

@@ -17,7 +17,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/demo", label: "Demo", icon: Presentation },
   { href: "/patients", label: "Patients", icon: UsersRound },
   { href: "/follow-ups", label: "Follow-Ups", icon: ClipboardList },
@@ -37,7 +37,7 @@ export function MobileNav() {
       <div className="flex gap-2 overflow-x-auto pb-1">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          const active = pathname.startsWith(item.href);
 
           return (
             <Link

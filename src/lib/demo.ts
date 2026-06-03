@@ -121,7 +121,7 @@ export function getDemoValuePillars() {
 
 export function getDemoTimeline() {
   return [
-    { step: "1", title: "Dashboard shows network health", href: "/", detail: "Revenue, branch, patient, order, and stock signals appear in one executive view." },
+    { step: "1", title: "Dashboard shows network health", href: "/dashboard", detail: "Revenue, branch, patient, order, and stock signals appear in one executive view." },
     { step: "2", title: "AI Brief explains what matters", href: "/ai-brief", detail: "The owner sees priorities, risks, and actions before calling anyone." },
     { step: "3", title: "Chronic Engine identifies patients at risk", href: "/patients", detail: "Due, overdue, VIP, high-risk, and lost patients become visible." },
     { step: "4", title: "Follow-Up Queue recovers revenue", href: "/follow-ups", detail: "Staff get reasons, suggested actions, and WhatsApp-ready messages." },

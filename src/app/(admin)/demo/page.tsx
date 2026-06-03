@@ -79,7 +79,7 @@ export default async function DemoPage() {
                 View AI Brief
                 <Bot className="h-4 w-4" aria-hidden="true" />
               </Link>
-              <Link href="/" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2.5 text-sm font-semibold text-white ring-1 ring-white/15 transition hover:bg-white/15">
+              <Link href="/dashboard" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2.5 text-sm font-semibold text-white ring-1 ring-white/15 transition hover:bg-white/15">
                 Open Dashboard
                 <ExternalLink className="h-4 w-4" aria-hidden="true" />
               </Link>
