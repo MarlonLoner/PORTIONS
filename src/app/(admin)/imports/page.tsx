@@ -1,4 +1,5 @@
 import { Bot, CheckCircle2, FileSpreadsheet, ShieldCheck, UploadCloud } from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { ImportTemplateActions } from "@/components/import-template-actions";
 import {
@@ -47,6 +48,10 @@ export default function ImportsPage() {
             <p className="mt-4 max-w-3xl text-base leading-7 text-slate-200">
               Prepare pharmacy data for chronic patients, stock, branches, staff, orders, and follow-up workflows before launching a PORTIONS pilot.
             </p>
+            <Link href="/imports/upload" className="focus-ring mt-7 inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-navy-950 transition hover:bg-clinical-50">
+              <UploadCloud className="h-4 w-4" aria-hidden="true" />
+              Upload CSV for Preview
+            </Link>
           </div>
 
           <div className="rounded-lg border border-white/10 bg-white/10 p-4">
