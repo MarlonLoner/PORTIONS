@@ -537,3 +537,9 @@ export async function getPilotRequestsData() {
     orderBy: { createdAt: "desc" }
   });
 }
+
+export async function getImportBatchesData() {
+  return prisma.importBatch.findMany({
+    orderBy: { createdAt: "desc" }
+  });
+}

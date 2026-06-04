@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckCircle2, ClipboardCopy, Download, RotateCcw, UploadCloud } from "lucide-react";
+import Link from "next/link";
 import { ChangeEvent, useMemo, useState } from "react";
 import {
   getAiImportUploadAdvisor,
@@ -37,6 +38,9 @@ export function ImportUploadPreview({
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<Record<string, string>[]>([]);
   const [readyMarked, setReadyMarked] = useState(false);
+  const [savingBatch, setSavingBatch] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [savedBatchId, setSavedBatchId] = useState("");
 
   const selectedTemplate = templates.find((template) => template.id === templateId) ?? templates[0];
   const columnValidation = useMemo(() => validateCsvColumns(headers, selectedTemplate), [headers, selectedTemplate]);
@@ -71,6 +75,8 @@ export function ImportUploadPreview({
     setFileName(file.name);
     setHeaders(parsed.headers);
     setRows(parsed.rows);
+    setSavedBatchId("");
+    setSaveError("");
   }
 
   function clearUpload() {
@@ -78,6 +84,49 @@ export function ImportUploadPreview({
     setHeaders([]);
     setRows([]);
     setReadyMarked(false);
+    setSavedBatchId("");
+    setSaveError("");
+  }
+
+  async function saveImportBatch() {
+    if (!fileName) {
+      setSaveError("Upload a CSV file before saving an import batch.");
+      return;
+    }
+
+    setSavingBatch(true);
+    setSaveError("");
+
+    const response = await fetch("/api/import-batches", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        templateType: selectedTemplate.id,
+        fileName,
+        rowCount: rows.length,
+        readinessScore,
+        validationStatus,
+        missingFields: columnValidation.missingRequiredFields,
+        extraFields: columnValidation.extraFields,
+        optionalFieldsDetected: columnValidation.optionalFieldsDetected,
+        issueCount: rowIssues.length,
+        dateWarningCount: issueSummary.dateWarnings,
+        numericWarningCount: issueSummary.numericWarnings,
+        duplicateWarningCount: issueSummary.duplicateWarnings,
+        branchWarningCount: issueSummary.branchWarnings
+      })
+    });
+
+    setSavingBatch(false);
+
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({ error: "Import batch could not be saved." }));
+      setSaveError(result.error ?? "Import batch could not be saved.");
+      return;
+    }
+
+    const result = await response.json();
+    setSavedBatchId(result.id);
   }
 
   async function copyRequiredHeaders() {
@@ -248,8 +297,18 @@ export function ImportUploadPreview({
               <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
               Mark as Ready for Pilot Import
             </button>
+            <button type="button" onClick={saveImportBatch} disabled={savingBatch || !fileName} className="focus-ring inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60">
+              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+              {savingBatch ? "Saving..." : "Save Import Batch"}
+            </button>
           </div>
           {readyMarked ? <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-100">Marked ready for pilot import review. This is UI-only for now.</p> : null}
+          {saveError ? <p className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 ring-1 ring-rose-100">{saveError}</p> : null}
+          {savedBatchId ? (
+            <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-100">
+              Import batch saved. <Link href="/imports/batches" className="underline">Review saved batches</Link>.
+            </p>
+          ) : null}
         </article>
       </section>
     </div>

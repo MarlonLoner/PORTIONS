@@ -7,6 +7,7 @@ import {
   Building2,
   ClipboardCheck,
   ClipboardList,
+  Database,
   FileSpreadsheet,
   LayoutDashboard,
   PackageSearch,
@@ -31,6 +32,7 @@ const navItems = [
   { href: "/pilot-requests", label: "Pilots", icon: ClipboardList },
   { href: "/onboarding", label: "Onboard", icon: ClipboardCheck },
   { href: "/imports", label: "Imports", icon: FileSpreadsheet },
+  { href: "/imports/batches", label: "Batches", icon: Database },
   { href: "/settings", label: "Settings", icon: Settings }
 ];
 
