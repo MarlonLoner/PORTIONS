@@ -5,6 +5,7 @@ import {
   BarChart3,
   Bot,
   Building2,
+  ClipboardCheck,
   ClipboardList,
   LayoutDashboard,
   PackageSearch,
@@ -27,6 +28,7 @@ const navItems = [
   { href: "/ai-brief", label: "AI Brief", icon: Bot },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/pilot-requests", label: "Pilots", icon: ClipboardList },
+  { href: "/onboarding", label: "Onboard", icon: ClipboardCheck },
   { href: "/settings", label: "Settings", icon: Settings }
 ];
 
