@@ -531,3 +531,9 @@ export async function getDemoData() {
 
   return { dashboard, branches, stock, orders, patients, followUps };
 }
+
+export async function getPilotRequestsData() {
+  return prisma.pilotRequest.findMany({
+    orderBy: { createdAt: "desc" }
+  });
+}

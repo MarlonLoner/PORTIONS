@@ -83,7 +83,7 @@ export default function LandingPage() {
             <Link href="/enter" className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-navy-950">
               Enter Command OS
             </Link>
-            <Link href="#pilot" className="rounded-lg bg-navy-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-navy-800">
+            <Link href="/pilot" className="rounded-lg bg-navy-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-navy-800">
               Request Pilot
             </Link>
           </nav>
@@ -109,7 +109,7 @@ export default function LandingPage() {
             <div className="mt-8 flex flex-wrap gap-3">
               <Cta href="/demo" label="View Demo" primary />
               <Cta href="/enter" label="Enter Command OS" />
-              <Cta href="#pilot" label="Request Pilot" />
+              <Cta href="/pilot" label="Request Pilot" />
             </div>
           </div>
 
@@ -184,7 +184,7 @@ export default function LandingPage() {
                 Prove the value story with a focused rollout: branch setup, chronic patient import, order tracking, stock visibility, and an executive report after the first week.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
-                <Link href="mailto:pilot@portions.health?subject=PORTIONS%20Pilot%20Request" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-navy-950 transition hover:bg-clinical-50">
+                <Link href="/pilot" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-navy-950 transition hover:bg-clinical-50">
                   Request Pilot
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Link>

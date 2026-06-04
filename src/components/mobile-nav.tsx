@@ -26,6 +26,7 @@ const navItems = [
   { href: "/stock", label: "Stock", icon: PackageSearch },
   { href: "/ai-brief", label: "AI Brief", icon: Bot },
   { href: "/reports", label: "Reports", icon: BarChart3 },
+  { href: "/pilot-requests", label: "Pilots", icon: ClipboardList },
   { href: "/settings", label: "Settings", icon: Settings }
 ];
 
