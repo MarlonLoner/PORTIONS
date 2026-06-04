@@ -29,6 +29,11 @@ export function TopBar() {
           <span className="hidden rounded-full bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-emerald-700 ring-1 ring-emerald-100 sm:inline-flex">
             Demo Mode
           </span>
+          <form action="/api/demo-access/logout" method="post" className="hidden sm:block lg:hidden">
+            <button type="submit" className="focus-ring rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">
+              Exit Demo
+            </button>
+          </form>
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
             <CalendarDays className="h-4 w-4 text-clinical-700" aria-hidden="true" />
             <span className="hidden sm:inline">{date}</span>

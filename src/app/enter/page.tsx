@@ -5,21 +5,34 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
-const DEMO_CODE = "PORTIONS-DEMO";
-
 export default function EnterPage() {
   const router = useRouter();
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (code.trim().toUpperCase() === DEMO_CODE) {
-      setError("");
-      router.push("/dashboard");
+    setSubmitting(true);
+    setError("");
+
+    const response = await fetch("/api/demo-access", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code })
+    });
+
+    setSubmitting(false);
+
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({ error: "Demo access could not be verified. Please try again." }));
+      setError(result.error ?? "Demo access could not be verified. Please try again.");
       return;
     }
-    setError("That demo access code is not valid. Please check the code from your guided walkthrough.");
+
+    const next = new URLSearchParams(window.location.search).get("next");
+    router.push(next && next.startsWith("/") ? next : "/dashboard");
+    router.refresh();
   }
 
   return (
@@ -81,8 +94,8 @@ export default function EnterPage() {
 
               {error ? <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 ring-1 ring-rose-100">{error}</p> : null}
 
-              <button type="submit" className="focus-ring inline-flex w-full items-center justify-center gap-2 rounded-lg bg-navy-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-navy-800">
-                Enter Command OS
+              <button type="submit" disabled={submitting} className="focus-ring inline-flex w-full items-center justify-center gap-2 rounded-lg bg-navy-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-70">
+                {submitting ? "Checking access..." : "Enter Command OS"}
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </button>
             </form>

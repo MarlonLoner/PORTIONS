@@ -78,6 +78,11 @@ export function Sidebar() {
           <p className="mt-1 text-xs leading-5 text-slate-300">
             Routes live inside the admin shell so authentication can wrap this surface later.
           </p>
+          <form action="/api/demo-access/logout" method="post" className="mt-4">
+            <button type="submit" className="focus-ring w-full rounded-lg bg-white px-3 py-2 text-xs font-semibold text-navy-950 transition hover:bg-clinical-50">
+              Exit Demo
+            </button>
+          </form>
         </div>
       </div>
     </aside>
