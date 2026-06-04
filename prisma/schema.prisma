@@ -267,6 +267,11 @@ model PilotRequest {
   mainPain       String
   urgency        String
   notes          String?
+  internalNotes  String?
+  nextAction     String?
+  contactedAt    DateTime?
+  qualifiedAt    DateTime?
+  closedAt       DateTime?
   status         PilotRequestStatus @default(NEW)
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
