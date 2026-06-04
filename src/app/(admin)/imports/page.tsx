@@ -99,6 +99,11 @@ export default function ImportsPage() {
                   <MiniMetric label="Optional fields" value={String(template.optionalFields.length)} />
                   <MiniMetric label="Source system" value={template.suggestedSource} />
                 </div>
+                {template.id === "chronic-patients" ? (
+                  <p className="mt-4 rounded-lg bg-clinical-50 p-3 text-sm font-semibold leading-6 text-clinical-900 ring-1 ring-clinical-100">
+                    If you do not know the exact next refill date, provide refill_cycle_days. PORTIONS can estimate the first schedule during pilot setup.
+                  </p>
+                ) : null}
 
                 <ImportTemplateActions templateId={template.id} templateName={template.name} headers={headers} exampleRow={exampleRow} />
               </article>

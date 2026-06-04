@@ -19,12 +19,12 @@ export function getImportTemplates(): ImportTemplate[] {
       id: "chronic-patients",
       name: "Chronic Patients",
       purpose: "Create the recurring revenue engine and refill follow-up queue.",
-      requiredFields: ["patient_name", "phone_number", "branch", "condition_category", "medication_list", "refill_cycle_days", "next_refill_date"],
-      optionalFields: ["package_type", "assigned_staff", "last_contacted_date", "risk_score", "notes"],
+      requiredFields: ["patient_name", "phone_number", "branch", "condition_category", "medication_list", "refill_cycle_days"],
+      optionalFields: ["next_refill_date", "last_refill_date", "package_type", "assigned_staff", "last_contacted_date", "risk_score", "notes"],
       difficulty: "Advanced",
       importance: "Required",
       suggestedSource: "ProPharm export, patient register, chronic spreadsheet",
-      exampleRow: ["Memory Moyo", "+263771234567", "CBD", "Hypertension", "Amlodipine 5mg; Atenolol 50mg", "30", "2026-06-18", "CHRONIC_PLUS", "Tariro M.", "2026-06-01", "HIGH", "Prefers delivery"]
+      exampleRow: ["Memory Moyo", "+263771234567", "CBD", "Hypertension", "Amlodipine 5mg; Atenolol 50mg", "30", "2026-06-18", "2026-05-19", "CHRONIC_PLUS", "Tariro M.", "2026-06-01", "HIGH", "Prefers delivery"]
     },
     {
       id: "stock-items",
@@ -132,5 +132,5 @@ export function getImportFlowSteps() {
 }
 
 export function getAiImportAdvisor() {
-  return "Start with chronic patients and branches first. Stock and orders can be imported after the first pilot review. For ProPharm/POS exports, map branch names and product categories before importing.";
+  return "Start with chronic patients and branches first. If exact next refill dates are not available, provide refill cycle days and optionally last refill dates so PORTIONS can estimate the first pilot schedule.";
 }

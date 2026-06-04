@@ -55,14 +55,17 @@ export function ImportUploadPreview({
     hasFile: Boolean(fileName),
     missingRequiredFields: columnValidation.missingRequiredFields,
     issues: rowIssues,
-    status: validationStatus
+    status: validationStatus,
+    templateId: selectedTemplate.id
   });
   const issueSummary = {
+    blockingIssues: rowIssues.filter((issue) => issue.type !== "schedule").length,
     rowsWithIssues: new Set(rowIssues.map((issue) => issue.rowNumber)).size,
     dateWarnings: rowIssues.filter((issue) => issue.type === "date").length,
     numericWarnings: rowIssues.filter((issue) => issue.type === "numeric").length,
     duplicateWarnings: rowIssues.filter((issue) => issue.type === "duplicate").length,
-    branchWarnings: rowIssues.filter((issue) => issue.type === "branch").length
+    branchWarnings: rowIssues.filter((issue) => issue.type === "branch").length,
+    scheduleWarnings: rowIssues.filter((issue) => issue.type === "schedule").length
   };
   const previewRows = rows.slice(0, 10);
 
@@ -109,7 +112,7 @@ export function ImportUploadPreview({
         missingFields: columnValidation.missingRequiredFields,
         extraFields: columnValidation.extraFields,
         optionalFieldsDetected: columnValidation.optionalFieldsDetected,
-        issueCount: rowIssues.length,
+        issueCount: issueSummary.blockingIssues,
         dateWarningCount: issueSummary.dateWarnings,
         numericWarningCount: issueSummary.numericWarnings,
         duplicateWarningCount: issueSummary.duplicateWarnings,
@@ -190,6 +193,11 @@ export function ImportUploadPreview({
             ))}
           </select>
           <p className="mt-4 text-sm leading-6 text-slate-600">{selectedTemplate.purpose}</p>
+          {selectedTemplate.id === "chronic-patients" ? (
+            <p className="mt-4 rounded-lg bg-clinical-50 p-3 text-sm font-semibold leading-6 text-clinical-900 ring-1 ring-clinical-100">
+              If you do not know the exact next refill date, provide refill_cycle_days. PORTIONS can estimate the first schedule during pilot setup.
+            </p>
+          ) : null}
         </article>
 
         <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
@@ -227,6 +235,7 @@ export function ImportUploadPreview({
             <SummaryMetric label="Numeric warnings" value={String(issueSummary.numericWarnings)} />
             <SummaryMetric label="Duplicate warnings" value={String(issueSummary.duplicateWarnings)} />
             <SummaryMetric label="Branch warnings" value={String(issueSummary.branchWarnings)} />
+            <SummaryMetric label="Schedule warnings" value={String(issueSummary.scheduleWarnings)} />
             <SummaryMetric label="Readiness score" value={`${readinessScore}%`} />
           </div>
         </article>

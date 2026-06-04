@@ -83,7 +83,9 @@ export function mapChronicPatientRow(row: Record<string, string>) {
     assignedStaffName: row.assigned_staff?.trim() ?? "",
     lastContactedAt: row.last_contacted_date?.trim() ?? "",
     riskScore: normalizeRiskScore(row.risk_score),
-    medicationList: row.medication_list?.trim() ?? ""
+    medicationList: row.medication_list?.trim() ?? "",
+    lastRefillDate: row.last_refill_date?.trim() ?? "",
+    refillCycleDays: row.refill_cycle_days?.trim() ?? ""
   };
 }
 
@@ -169,8 +171,14 @@ export async function executeChronicPatientImport(tx: PrismaClient | Prisma.Tran
     const rowNumber = index + 2;
     const mapped = mapChronicPatientRow(row);
 
-    if (!mapped.name || !mapped.phone || !mapped.branchName || !mapped.nextRefillDate) {
-      rowResults.push({ rowNumber, action: "failed", recordType: "Patient", name: mapped.name || "Unknown patient", reason: "patient_name, phone_number, branch, and next_refill_date are required." });
+    if (!mapped.name || !mapped.phone || !mapped.branchName || !mapped.conditionCategory || !mapped.medicationList || !mapped.refillCycleDays) {
+      rowResults.push({ rowNumber, action: "failed", recordType: "Patient", name: mapped.name || "Unknown patient", reason: "patient_name, phone_number, branch, condition_category, medication_list, and refill_cycle_days are required." });
+      continue;
+    }
+
+    const cycleDays = Number(mapped.refillCycleDays);
+    if (!Number.isFinite(cycleDays) || cycleDays <= 0) {
+      rowResults.push({ rowNumber, action: "failed", recordType: "Patient", name: mapped.name, reason: "refill_cycle_days must be a valid positive number." });
       continue;
     }
 
@@ -180,9 +188,9 @@ export async function executeChronicPatientImport(tx: PrismaClient | Prisma.Tran
       continue;
     }
 
-    const nextRefillDate = parseImportDate(mapped.nextRefillDate);
-    if (!nextRefillDate) {
-      rowResults.push({ rowNumber, action: "failed", recordType: "Patient", name: mapped.name, reason: "next_refill_date must use YYYY-MM-DD." });
+    const schedule = deriveNextRefillDate(mapped.nextRefillDate, mapped.lastRefillDate, cycleDays);
+    if (!schedule.date) {
+      rowResults.push({ rowNumber, action: "failed", recordType: "Patient", name: mapped.name, reason: schedule.note });
       continue;
     }
 
@@ -219,7 +227,7 @@ export async function executeChronicPatientImport(tx: PrismaClient | Prisma.Tran
         conditionCategory: mapped.conditionCategory,
         packageType: mapped.packageType,
         medicationCycle: mapped.medicationCycle,
-        nextRefillDate,
+        nextRefillDate: schedule.date,
         status: PatientStatus.ACTIVE,
         assignedStaffId: assignedStaff?.id,
         lastContactedAt,
@@ -245,7 +253,7 @@ export async function executeChronicPatientImport(tx: PrismaClient | Prisma.Tran
     });
 
     const staffWarning = mapped.assignedStaffName && !assignedStaff ? ` Assigned staff '${mapped.assignedStaffName}' was not found; patient imported without assigned staff.` : "";
-    rowResults.push({ rowNumber, action: "imported", recordType: "Patient", name: mapped.name, reason: `Patient and ${medicines.length || 1} medication record${(medicines.length || 1) === 1 ? "" : "s"} created.${staffWarning}` });
+    rowResults.push({ rowNumber, action: "imported", recordType: "Patient", name: mapped.name, reason: `Patient and ${medicines.length || 1} medication record${(medicines.length || 1) === 1 ? "" : "s"} created. ${schedule.note}.${staffWarning}` });
   }
 
   return summarizeRowResults(rowResults);
@@ -271,7 +279,7 @@ export function getImportExecutionWarnings(batch: ImportBatchForExecution) {
 
   if (!eligibility.allowed) warnings.push(eligibility.reason);
   if (batch.templateType === "staff-members") warnings.push("Staff rows require matching Branch names to exist before execution.");
-  if (batch.templateType === "chronic-patients") warnings.push("Chronic patient rows require matching Branch names, valid refill dates, and unique phone numbers.");
+  if (batch.templateType === "chronic-patients") warnings.push("Chronic patient rows require matching Branch names, numeric refill cycle days, and unique phone numbers. Missing next refill dates can be estimated during execution.");
   if (!["branches", "staff-members", "chronic-patients"].includes(batch.templateType)) warnings.push("Only Branches, Staff Members, and Chronic Patients can be executed right now.");
 
   return warnings;
@@ -293,6 +301,25 @@ function parseImportDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const date = new Date(`${value}T00:00:00.000Z`);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function deriveNextRefillDate(nextRefillDate: string, lastRefillDate: string, cycleDays: number) {
+  if (nextRefillDate) {
+    const date = parseImportDate(nextRefillDate);
+    return date ? { date, note: "Used provided next refill date" } : { date: null, note: "next_refill_date must use YYYY-MM-DD." };
+  }
+
+  if (lastRefillDate) {
+    const date = parseImportDate(lastRefillDate);
+    if (!date) return { date: null, note: "last_refill_date must use YYYY-MM-DD." };
+    date.setUTCDate(date.getUTCDate() + cycleDays);
+    return { date, note: "Calculated from last refill date and cycle" };
+  }
+
+  const date = new Date();
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() + cycleDays);
+  return { date, note: "Estimated from today and cycle. Imported but schedule needs review" };
 }
 
 function summarizeRowResults(rowResults: ImportRowResult[]): ImportExecutionResult {

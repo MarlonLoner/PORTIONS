@@ -117,6 +117,7 @@ export function getBatchIssueBreakdown(batch: ImportBatchLike) {
     numericWarnings: batch.numericWarningCount,
     duplicateWarnings: batch.duplicateWarningCount,
     branchWarnings: batch.branchWarningCount,
+    scheduleWarnings: issues.filter((issue) => issue.type === "schedule").length,
     totalIssues: batch.issueCount,
     issues
   };

@@ -104,6 +104,7 @@ export default async function ImportBatchDetailPage({ params }: { params: Promis
             <Metric label="Numeric warnings" value={String(breakdown.numericWarnings)} />
             <Metric label="Duplicate warnings" value={String(breakdown.duplicateWarnings)} />
             <Metric label="Branch warnings" value={String(breakdown.branchWarnings)} />
+            <Metric label="Schedule warnings" value={String(breakdown.scheduleWarnings)} />
             <Metric label="Total issues" value={String(breakdown.totalIssues)} />
           </div>
         </Panel>

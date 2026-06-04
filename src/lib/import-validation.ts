@@ -9,7 +9,7 @@ export type CsvRowIssue = {
   rowNumber: number;
   field: string;
   message: string;
-  type: "empty" | "date" | "numeric" | "duplicate" | "branch";
+  type: "empty" | "date" | "numeric" | "duplicate" | "branch" | "schedule";
 };
 
 const numericFields = new Set(["branch_count", "stock_level", "reorder_level", "amount", "refill_cycle_days", "unit_cost"]);
@@ -131,6 +131,22 @@ export function validateCsvRows(rows: Record<string, string>[], template: Import
     if (row.branch?.trim() && branchSet.size > 0 && !branchSet.has(row.branch.trim())) {
       issues.push({ rowNumber, field: "branch", message: "Branch does not match configured branch names.", type: "branch" });
     }
+
+    if (template.id === "chronic-patients") {
+      const hasNextRefillDate = Boolean(row.next_refill_date?.trim());
+      const hasLastRefillDate = Boolean(row.last_refill_date?.trim());
+      const hasCycle = Boolean(row.refill_cycle_days?.trim());
+
+      if (!hasNextRefillDate && !hasLastRefillDate && hasCycle) {
+        issues.push({ rowNumber, field: "next_refill_date", message: "Next refill date will be estimated during import. Patient will need refill schedule review.", type: "schedule" });
+      } else if (!hasNextRefillDate && hasLastRefillDate && hasCycle) {
+        issues.push({ rowNumber, field: "next_refill_date", message: "Next refill date can be calculated from last refill date and refill cycle.", type: "schedule" });
+      } else if (!hasNextRefillDate && hasCycle) {
+        issues.push({ rowNumber, field: "next_refill_date", message: "Next refill date will be estimated during import.", type: "schedule" });
+      } else if (!hasNextRefillDate && !hasLastRefillDate) {
+        issues.push({ rowNumber, field: "next_refill_date", message: "Patient will need refill schedule review.", type: "schedule" });
+      }
+    }
   });
 
   return issues;
@@ -146,14 +162,16 @@ export function getImportReadinessScore({
   issues: CsvRowIssue[];
 }) {
   if (rowCount === 0) return 0;
+  const blockingIssues = issues.filter((issue) => issue.type !== "schedule");
   const columnPenalty = missingRequiredFields.length * 18;
-  const issuePenalty = Math.min(issues.length * 3, 45);
+  const issuePenalty = Math.min(blockingIssues.length * 3, 45);
   return Math.max(0, Math.min(100, 100 - columnPenalty - issuePenalty));
 }
 
 export function getUploadValidationStatus(score: number, missingRequiredFields: string[], issues: CsvRowIssue[]) {
+  const blockingIssues = issues.filter((issue) => issue.type !== "schedule");
   if (missingRequiredFields.length > 0 || score < 45) return "Invalid";
-  if (issues.length > 0 || score < 85) return "Needs Cleanup";
+  if (blockingIssues.length > 0 || score < 85) return "Needs Cleanup";
   return "Ready";
 }
 
@@ -161,12 +179,14 @@ export function getAiImportUploadAdvisor({
   hasFile,
   missingRequiredFields,
   issues,
-  status
+  status,
+  templateId
 }: {
   hasFile: boolean;
   missingRequiredFields: string[];
   issues: CsvRowIssue[];
   status: string;
+  templateId?: string;
 }) {
   if (!hasFile) {
     return "Start by downloading a template, filling it with pharmacy data, then uploading it here.";
@@ -174,6 +194,24 @@ export function getAiImportUploadAdvisor({
 
   if (missingRequiredFields.length > 0) {
     return "Add the missing required columns before importing. PORTIONS needs the core fields to map pharmacy data safely.";
+  }
+
+  if (templateId === "chronic-patients") {
+    const scheduleWarnings = issues.filter((issue) => issue.type === "schedule");
+    const calculatedWarnings = scheduleWarnings.filter((issue) => issue.message.includes("calculated"));
+    const estimatedWarnings = scheduleWarnings.filter((issue) => issue.message.includes("estimated"));
+
+    if (scheduleWarnings.length > 8) {
+      return "Many chronic patient rows lack refill dates. Import can proceed, but review schedules after import before running follow-up campaigns.";
+    }
+
+    if (calculatedWarnings.length > 0) {
+      return "PORTIONS can calculate next refill dates from last refill date and refill cycle. Review the calculated schedule after import in the Chronic Revenue Engine.";
+    }
+
+    if (estimatedWarnings.length > 0) {
+      return "Some next refill dates are missing, but PORTIONS can estimate dates from refill cycle days during pilot setup.";
+    }
   }
 
   if (issues.length > 8) {
