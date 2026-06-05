@@ -12,51 +12,56 @@ import { prisma } from "@/lib/prisma";
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const batch = await prisma.importBatch.findUnique({ where: { id } });
-  if (!batch) {
-    return NextResponse.json({ error: "Import batch was not found." }, { status: 404 });
-  }
-
-  const eligibility = canExecuteImportBatch(batch);
-  if (!eligibility.allowed) {
-    return NextResponse.json({ error: eligibility.reason }, { status: 400 });
-  }
-
-  const rows = getStoredRows(batch);
-  if (rows.length === 0) {
-    return NextResponse.json({ error: "This batch has no stored rows to execute." }, { status: 400 });
-  }
-
-  const result = await prisma.$transaction(async (tx) => {
-    if (batch.templateType === "branches") {
-      return executeBranchImport(tx, rows);
+  try {
+    const batch = await prisma.importBatch.findUnique({ where: { id } });
+    if (!batch) {
+      return NextResponse.json({ error: "Import batch was not found." }, { status: 404 });
     }
 
-    if (batch.templateType === "chronic-patients") {
-      return executeChronicPatientImport(tx, rows);
+    const eligibility = canExecuteImportBatch(batch);
+    if (!eligibility.allowed) {
+      return NextResponse.json({ error: eligibility.reason }, { status: 400 });
     }
 
-    return executeStaffImport(tx, rows);
-  });
+    const rows = getStoredRows(batch);
+    if (rows.length === 0) {
+      return NextResponse.json({ error: "This batch has no stored rows to execute." }, { status: 400 });
+    }
 
-  const updated = await prisma.importBatch.update({
-    where: { id },
-    data: {
-      status: ImportBatchStatus.IMPORTED,
-      importedAt: new Date(),
+    const result = await prisma.$transaction(async (tx) => {
+      if (batch.templateType === "branches") {
+        return executeBranchImport(tx, rows);
+      }
+
+      if (batch.templateType === "chronic-patients") {
+        return executeChronicPatientImport(tx, rows);
+      }
+
+      return executeStaffImport(tx, rows);
+    });
+
+    const updated = await prisma.importBatch.update({
+      where: { id },
+      data: {
+        status: ImportBatchStatus.IMPORTED,
+        importedAt: new Date(),
+        importedRecordCount: result.importedRecordCount,
+        skippedRecordCount: result.skippedRecordCount,
+        failedRecordCount: result.failedRecordCount,
+        importResult: result.rowResults,
+        executionNotes: `Executed ${batch.templateType} import with ${result.importedRecordCount} imported, ${result.skippedRecordCount} skipped, and ${result.failedRecordCount} failed rows.`
+      }
+    });
+
+    return NextResponse.json({
       importedRecordCount: result.importedRecordCount,
       skippedRecordCount: result.skippedRecordCount,
       failedRecordCount: result.failedRecordCount,
-      importResult: result.rowResults,
-      executionNotes: `Executed ${batch.templateType} import with ${result.importedRecordCount} imported, ${result.skippedRecordCount} skipped, and ${result.failedRecordCount} failed rows.`
-    }
-  });
-
-  return NextResponse.json({
-    importedRecordCount: result.importedRecordCount,
-    skippedRecordCount: result.skippedRecordCount,
-    failedRecordCount: result.failedRecordCount,
-    rowResults: result.rowResults,
-    batch: updated
-  });
+      rowResults: result.rowResults,
+      batch: updated
+    });
+  } catch (error) {
+    console.error("Import batch execution failed", { batchId: id, message: error instanceof Error ? error.message : "Unknown error" });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Import execution failed." }, { status: 500 });
+  }
 }

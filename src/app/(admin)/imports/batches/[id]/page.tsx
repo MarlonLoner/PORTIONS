@@ -6,6 +6,7 @@ import { getImportBatchById } from "@/lib/data";
 import { formatDate } from "@/lib/format";
 import {
   canExecuteImportBatch,
+  getImportExecutionEligibilityChecks,
   getImportExecutionSummary,
   getImportExecutionWarnings,
   type ImportRowResult
@@ -42,6 +43,7 @@ export default async function ImportBatchDetailPage({ params }: { params: Promis
   const nextActions = getBatchDetailNextActions(batch);
   const issues = Array.isArray(batch.rowIssues) ? batch.rowIssues as Array<{ rowNumber?: number; field?: string; message?: string; type?: string }> : [];
   const executionEligibility = canExecuteImportBatch(batch);
+  const executionChecks = getImportExecutionEligibilityChecks(batch);
   const executionSummary = getImportExecutionSummary(batch);
   const executionWarnings = getImportExecutionWarnings(batch);
 
@@ -119,6 +121,25 @@ export default async function ImportBatchDetailPage({ params }: { params: Promis
         />
       </section>
 
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-700">Execution eligibility</p>
+        <h2 className="mt-2 text-xl font-semibold tracking-tight text-navy-950">Import Safety Checklist</h2>
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          {executionChecks.map((check) => (
+            <div key={check.label} className={check.passed ? "rounded-lg bg-emerald-50 p-3 ring-1 ring-emerald-100" : "rounded-lg bg-amber-50 p-3 ring-1 ring-amber-100"}>
+              <div className="flex items-center gap-2">
+                <span className={check.passed ? "h-2.5 w-2.5 rounded-full bg-emerald-500" : "h-2.5 w-2.5 rounded-full bg-amber-500"} />
+                <p className={check.passed ? "text-xs font-semibold uppercase tracking-[0.1em] text-emerald-700" : "text-xs font-semibold uppercase tracking-[0.1em] text-amber-700"}>
+                  {check.passed ? "Pass" : "Fail"}
+                </p>
+              </div>
+              <p className="mt-2 text-sm font-semibold text-navy-950">{check.label}</p>
+              <p className="mt-1 text-xs leading-5 text-slate-600">{check.detail}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {batch.importedAt || executionSummary.rowResults.length > 0 ? (
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-700">Execution result</p>
@@ -130,9 +151,7 @@ export default async function ImportBatchDetailPage({ params }: { params: Promis
           </div>
           <div className="mt-5 max-h-72 overflow-auto rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
             {executionSummary.rowResults.map((result: ImportRowResult) => (
-              <p key={`${result.rowNumber}-${result.recordType}-${result.name}-${result.action}`} className="text-sm leading-6 text-slate-700">
-                Row {result.rowNumber}: {result.action} {result.recordType} "{result.name}" - {result.reason}
-              </p>
+              <ExecutionResultRow key={`${result.rowNumber}-${result.recordType}-${result.name}-${result.action}`} result={result} />
             ))}
           </div>
           {batch.templateType === "chronic-patients" ? (
@@ -201,6 +220,32 @@ export default async function ImportBatchDetailPage({ params }: { params: Promis
           )}
         </div>
       </section>
+    </div>
+  );
+}
+
+function ExecutionResultRow({ result }: { result: ImportRowResult }) {
+  const hasWarning = (result.warnings?.length ?? 0) > 0 || result.scheduleNote?.includes("review");
+  const status = result.action === "imported" && hasWarning ? "Warning" : result.action === "imported" ? "Imported" : result.action === "skipped" ? "Skipped" : "Failed";
+  const className =
+    status === "Imported"
+      ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+      : status === "Warning"
+        ? "bg-amber-50 text-amber-700 ring-amber-100"
+        : status === "Skipped"
+          ? "bg-slate-100 text-slate-700 ring-slate-200"
+          : "bg-rose-50 text-rose-700 ring-rose-100";
+
+  return (
+    <div className="mb-3 rounded-lg bg-white p-3 ring-1 ring-slate-200">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] ring-1 ${className}`}>{status}</span>
+        <p className="text-sm font-semibold text-navy-950">Row {result.rowNumber}: {result.name}</p>
+        {result.phone ? <span className="text-xs font-semibold text-slate-500">{result.phone}</span> : null}
+      </div>
+      <p className="mt-2 text-sm leading-6 text-slate-700">{result.reason}</p>
+      {result.scheduleNote ? <p className="mt-1 text-xs font-semibold leading-5 text-clinical-800">Schedule: {result.scheduleNote}</p> : null}
+      {result.warnings?.length ? <p className="mt-1 text-xs font-semibold leading-5 text-amber-700">{result.warnings.join(" ")}</p> : null}
     </div>
   );
 }

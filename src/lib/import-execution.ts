@@ -21,6 +21,9 @@ export type ImportRowResult = {
   recordType: "Branch" | "StaffMember" | "Patient";
   name: string;
   reason: string;
+  phone?: string;
+  scheduleNote?: string;
+  warnings?: string[];
 };
 
 export type ImportExecutionResult = {
@@ -35,23 +38,46 @@ export function getStoredRows(batch: ImportBatchForExecution) {
 }
 
 export function canExecuteImportBatch(batch: ImportBatchForExecution) {
-  if (batch.importedAt || batch.status === "IMPORTED") {
-    return { allowed: false, reason: "This batch has already been imported." };
-  }
+  const checks = getImportExecutionEligibilityChecks(batch);
+  const failed = checks.find((check) => !check.passed);
+  if (failed) return { allowed: false, reason: failed.failMessage };
+  return { allowed: true, reason: "This batch is approved and ready for execution." };
+}
 
-  if (batch.status !== "APPROVED") {
-    return { allowed: false, reason: "Approve this batch before execution." };
-  }
-
-  if (!["branches", "staff-members", "chronic-patients"].includes(batch.templateType)) {
-    return { allowed: false, reason: "Execution for this template type is coming soon." };
-  }
-
-  if (batch.validationStatus === "Invalid" || batch.readinessScore < 70) {
-    return { allowed: false, reason: "This batch needs cleanup before execution." };
-  }
-
-  return { allowed: true, reason: "This approved batch can be executed into PORTIONS demo records." };
+export function getImportExecutionEligibilityChecks(batch: ImportBatchForExecution) {
+  const supportedTemplates = ["branches", "staff-members", "chronic-patients"];
+  return [
+    {
+      label: "Approved status required",
+      passed: batch.status === "APPROVED",
+      detail: batch.status === "APPROVED" ? "Batch status is APPROVED." : `Current status is ${batch.status}.`,
+      failMessage: "Approve this batch before execution."
+    },
+    {
+      label: "Supported template type",
+      passed: supportedTemplates.includes(batch.templateType),
+      detail: supportedTemplates.includes(batch.templateType) ? `${batch.templateType} imports can be executed.` : `${batch.templateType} execution is coming soon.`,
+      failMessage: "Execution for this template type is coming soon."
+    },
+    {
+      label: "Readiness score at least 70",
+      passed: batch.readinessScore >= 70,
+      detail: `Readiness score is ${batch.readinessScore}%.`,
+      failMessage: "This batch needs cleanup before execution."
+    },
+    {
+      label: "Validation status not Invalid",
+      passed: batch.validationStatus !== "Invalid",
+      detail: `Validation status is ${batch.validationStatus}.`,
+      failMessage: "This batch needs cleanup before execution."
+    },
+    {
+      label: "Not already imported",
+      passed: !batch.importedAt && batch.status !== "IMPORTED",
+      detail: batch.importedAt || batch.status === "IMPORTED" ? "Batch has already been imported." : "Batch has not been imported yet.",
+      failMessage: "This batch has already been imported."
+    }
+  ];
 }
 
 export function mapBranchRow(row: Record<string, string>) {
@@ -184,7 +210,7 @@ export async function executeChronicPatientImport(tx: PrismaClient | Prisma.Tran
 
     const branch = await tx.branch.findUnique({ where: { name: mapped.branchName } });
     if (!branch) {
-      rowResults.push({ rowNumber, action: "failed", recordType: "Patient", name: mapped.name, reason: `Branch '${mapped.branchName}' does not exist.` });
+      rowResults.push({ rowNumber, action: "failed", recordType: "Patient", name: mapped.name, phone: mapped.phone, reason: "Branch not found" });
       continue;
     }
 
@@ -202,7 +228,7 @@ export async function executeChronicPatientImport(tx: PrismaClient | Prisma.Tran
 
     const existing = await tx.patient.findFirst({ where: { phone: mapped.phone } });
     if (existing) {
-      rowResults.push({ rowNumber, action: "skipped", recordType: "Patient", name: mapped.name, reason: "Patient with this phone number already exists." });
+      rowResults.push({ rowNumber, action: "skipped", recordType: "Patient", name: mapped.name, phone: mapped.phone, reason: "Patient with this phone number already exists" });
       continue;
     }
 
@@ -219,41 +245,64 @@ export async function executeChronicPatientImport(tx: PrismaClient | Prisma.Tran
       .map((medicine) => medicine.trim())
       .filter(Boolean);
 
-    await tx.patient.create({
-      data: {
+    try {
+      await tx.patient.create({
+        data: {
+          name: mapped.name,
+          phone: mapped.phone,
+          branchId: branch.id,
+          conditionCategory: mapped.conditionCategory,
+          packageType: mapped.packageType,
+          medicationCycle: mapped.medicationCycle,
+          nextRefillDate: schedule.date,
+          status: PatientStatus.ACTIVE,
+          assignedStaffId: assignedStaff?.id,
+          lastContactedAt,
+          riskScore: mapped.riskScore,
+          medications: {
+            create: medicines.length > 0
+              ? medicines.map((medicine) => ({
+                  name: medicine,
+                  dosage: "As prescribed",
+                  frequency: "As directed",
+                  category: mapped.conditionCategory,
+                  notes: "Imported from chronic patient CSV"
+                }))
+              : [{
+                  name: "Medication to confirm",
+                  dosage: "As prescribed",
+                  frequency: "As directed",
+                  category: mapped.conditionCategory,
+                  notes: "Medication list missing during import"
+                }]
+          }
+        }
+      });
+    } catch (error) {
+      rowResults.push({
+        rowNumber,
+        action: "failed",
+        recordType: "Patient",
         name: mapped.name,
         phone: mapped.phone,
-        branchId: branch.id,
-        conditionCategory: mapped.conditionCategory,
-        packageType: mapped.packageType,
-        medicationCycle: mapped.medicationCycle,
-        nextRefillDate: schedule.date,
-        status: PatientStatus.ACTIVE,
-        assignedStaffId: assignedStaff?.id,
-        lastContactedAt,
-        riskScore: mapped.riskScore,
-        medications: {
-          create: medicines.length > 0
-            ? medicines.map((medicine) => ({
-                name: medicine,
-                dosage: "As prescribed",
-                frequency: "As directed",
-                category: mapped.conditionCategory,
-                notes: "Imported from chronic patient CSV"
-              }))
-            : [{
-                name: "Medication to confirm",
-                dosage: "As prescribed",
-                frequency: "As directed",
-                category: mapped.conditionCategory,
-                notes: "Medication list missing during import"
-              }]
-        }
+        scheduleNote: schedule.note,
+        reason: error instanceof Error ? `Patient could not be imported: ${error.message}` : "Patient could not be imported."
       }
-    });
+      );
+      continue;
+    }
 
-    const staffWarning = mapped.assignedStaffName && !assignedStaff ? ` Assigned staff '${mapped.assignedStaffName}' was not found; patient imported without assigned staff.` : "";
-    rowResults.push({ rowNumber, action: "imported", recordType: "Patient", name: mapped.name, reason: `Patient and ${medicines.length || 1} medication record${(medicines.length || 1) === 1 ? "" : "s"} created. ${schedule.note}.${staffWarning}` });
+    const warnings = mapped.assignedStaffName && !assignedStaff ? [`Assigned staff '${mapped.assignedStaffName}' was not found; patient imported without assigned staff.`] : [];
+    rowResults.push({
+      rowNumber,
+      action: "imported",
+      recordType: "Patient",
+      name: mapped.name,
+      phone: mapped.phone,
+      scheduleNote: schedule.note,
+      warnings,
+      reason: `Patient and ${medicines.length || 1} medication record${(medicines.length || 1) === 1 ? "" : "s"} created.`
+    });
   }
 
   return summarizeRowResults(rowResults);

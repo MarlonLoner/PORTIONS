@@ -2,6 +2,7 @@
 
 import { CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { ImportRowResult } from "@/lib/import-execution";
 import { importBatchStatusClasses, importBatchStatusLabels, type ImportBatchStatusValue } from "@/lib/import-batches";
@@ -21,9 +22,11 @@ export function ImportBatchDetailActions({
   executionMessage: string;
   alreadyImported: boolean;
 }) {
+  const router = useRouter();
   const [notes, setNotes] = useState(initialNotes);
   const [busy, setBusy] = useState("");
   const [feedback, setFeedback] = useState("");
+  const [feedbackTone, setFeedbackTone] = useState<"success" | "error">("success");
   const [executionResult, setExecutionResult] = useState<{
     importedRecordCount: number;
     skippedRecordCount: number;
@@ -40,7 +43,16 @@ export function ImportBatchDetailActions({
       body: JSON.stringify(payload)
     });
     setBusy("");
-    setFeedback(response.ok ? message : "Update failed. Please try again.");
+    if (!response.ok) {
+      const result = await response.json().catch(() => null);
+      setFeedbackTone("error");
+      setFeedback(result?.error ?? "Update failed. Please try again.");
+      return;
+    }
+
+    setFeedbackTone("success");
+    setFeedback(message);
+    router.refresh();
   }
 
   async function executeImport() {
@@ -51,12 +63,15 @@ export function ImportBatchDetailActions({
 
     const result = await response.json().catch(() => null);
     if (!response.ok) {
+      setFeedbackTone("error");
       setFeedback(result?.error ?? "Import execution failed.");
       return;
     }
 
     setExecutionResult(result);
+    setFeedbackTone("success");
     setFeedback("Import execution completed.");
+    router.refresh();
   }
 
   return (
@@ -90,7 +105,11 @@ export function ImportBatchDetailActions({
         <Link href="/imports/batches" className="focus-ring inline-flex items-center rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50">Back to Import Batches</Link>
         <Link href="/imports/upload" className="focus-ring inline-flex items-center rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50">Back to Upload</Link>
       </div>
-      {feedback ? <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-100">{feedback}</p> : null}
+      {feedback ? (
+        <p className={feedbackTone === "success" ? "mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-100" : "mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 ring-1 ring-rose-100"}>
+          {feedback}
+        </p>
+      ) : null}
       {executionResult ? (
         <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
           <p className="text-sm font-semibold text-navy-950">Import result summary</p>
@@ -101,9 +120,7 @@ export function ImportBatchDetailActions({
           </div>
           <div className="mt-3 max-h-56 overflow-auto rounded-lg bg-white p-3 ring-1 ring-slate-200">
             {executionResult.rowResults.slice(0, 20).map((result) => (
-              <p key={`${result.rowNumber}-${result.name}-${result.action}`} className="text-xs leading-5 text-slate-700">
-                Row {result.rowNumber}: {result.action} {result.recordType} "{result.name}" - {result.reason}
-              </p>
+              <ExecutionResultLine key={`${result.rowNumber}-${result.name}-${result.action}`} result={result} />
             ))}
           </div>
           {templateType === "chronic-patients" ? (
@@ -119,6 +136,23 @@ export function ImportBatchDetailActions({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function ExecutionResultLine({ result }: { result: ImportRowResult }) {
+  const hasWarning = (result.warnings?.length ?? 0) > 0 || result.scheduleNote?.includes("review");
+  const status = result.action === "imported" && hasWarning ? "Warning" : result.action === "imported" ? "Imported" : result.action === "skipped" ? "Skipped" : "Failed";
+
+  return (
+    <div className="border-b border-slate-100 py-2 last:border-b-0">
+      <p className="text-xs font-semibold leading-5 text-navy-950">
+        Row {result.rowNumber}: {status} {result.name}
+        {result.phone ? ` (${result.phone})` : ""}
+      </p>
+      <p className="text-xs leading-5 text-slate-700">{result.reason}</p>
+      {result.scheduleNote ? <p className="text-xs font-semibold leading-5 text-clinical-800">Schedule: {result.scheduleNote}</p> : null}
+      {result.warnings?.length ? <p className="text-xs font-semibold leading-5 text-amber-700">{result.warnings.join(" ")}</p> : null}
+    </div>
   );
 }
 
