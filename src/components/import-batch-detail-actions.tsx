@@ -133,6 +133,13 @@ export function ImportBatchDetailActions({
               </Link>
             </div>
           ) : null}
+          {templateType === "stock-items" ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link href="/stock" className="focus-ring rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white">
+                Review Stock Intelligence
+              </Link>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>

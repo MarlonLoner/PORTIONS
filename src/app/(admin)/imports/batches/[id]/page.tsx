@@ -159,6 +159,11 @@ export default async function ImportBatchDetailPage({ params }: { params: Promis
               Next operational action: review the Chronic Revenue Engine and Follow-Up Queue to confirm imported patients are visible for refill recovery.
             </p>
           ) : null}
+          {batch.templateType === "stock-items" ? (
+            <p className="mt-4 rounded-lg bg-clinical-50 p-3 text-sm font-semibold leading-6 text-clinical-900">
+              Next operational action: review Stock Intelligence and the Reorder Command to confirm imported items are visible for branch stock risk.
+            </p>
+          ) : null}
         </section>
       ) : null}
 

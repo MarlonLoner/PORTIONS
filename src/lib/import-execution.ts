@@ -1,4 +1,4 @@
-import { PackageType, PatientStatus, RiskScore } from "@prisma/client";
+import { PackageType, PatientStatus, RiskScore, StockStatus } from "@prisma/client";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 type ImportBatchForExecution = {
@@ -18,7 +18,7 @@ type ImportBatchForExecution = {
 export type ImportRowResult = {
   rowNumber: number;
   action: "imported" | "skipped" | "failed";
-  recordType: "Branch" | "StaffMember" | "Patient";
+  recordType: "Branch" | "StaffMember" | "Patient" | "StockItem";
   name: string;
   reason: string;
   phone?: string;
@@ -45,7 +45,7 @@ export function canExecuteImportBatch(batch: ImportBatchForExecution) {
 }
 
 export function getImportExecutionEligibilityChecks(batch: ImportBatchForExecution) {
-  const supportedTemplates = ["branches", "staff-members", "chronic-patients"];
+  const supportedTemplates = ["branches", "staff-members", "chronic-patients", "stock-items"];
   return [
     {
       label: "Approved status required",
@@ -112,6 +112,20 @@ export function mapChronicPatientRow(row: Record<string, string>) {
     medicationList: row.medication_list?.trim() ?? "",
     lastRefillDate: row.last_refill_date?.trim() ?? "",
     refillCycleDays: row.refill_cycle_days?.trim() ?? ""
+  };
+}
+
+export function mapStockRow(row: Record<string, string>) {
+  return {
+    productName: row.product_name?.trim() ?? "",
+    category: row.category?.trim() ?? "",
+    branchName: row.branch?.trim() ?? "",
+    stockLevel: row.stock_level?.trim() ?? "",
+    reorderLevel: row.reorder_level?.trim() ?? "",
+    expiryDate: row.expiry_date?.trim() ?? "",
+    unitCost: row.unit_cost?.trim() ?? "",
+    status: row.status?.trim() ?? "",
+    notes: row.notes?.trim() ?? ""
   };
 }
 
@@ -185,6 +199,100 @@ export async function executeStaffImport(tx: PrismaClient | Prisma.TransactionCl
       }
     });
     rowResults.push({ rowNumber, action: "imported", recordType: "StaffMember", name: mapped.name, reason: "Staff member created." });
+  }
+
+  return summarizeRowResults(rowResults);
+}
+
+export async function executeStockImport(tx: PrismaClient | Prisma.TransactionClient, rows: Array<Record<string, string>>): Promise<ImportExecutionResult> {
+  const rowResults: ImportRowResult[] = [];
+
+  for (const [index, row] of rows.entries()) {
+    const rowNumber = index + 2;
+    const mapped = mapStockRow(row);
+
+    if (!mapped.productName || !mapped.category || !mapped.branchName || !mapped.stockLevel || !mapped.reorderLevel) {
+      rowResults.push({ rowNumber, action: "failed", recordType: "StockItem", name: mapped.productName || "Unknown stock item", reason: "product_name, category, branch, stock_level, and reorder_level are required." });
+      continue;
+    }
+
+    const stockLevel = Number(mapped.stockLevel);
+    const reorderLevel = Number(mapped.reorderLevel);
+    if (!Number.isFinite(stockLevel) || !Number.isInteger(stockLevel) || stockLevel < 0) {
+      rowResults.push({ rowNumber, action: "failed", recordType: "StockItem", name: mapped.productName, reason: "stock_level must be a valid whole number." });
+      continue;
+    }
+
+    if (!Number.isFinite(reorderLevel) || !Number.isInteger(reorderLevel) || reorderLevel < 0) {
+      rowResults.push({ rowNumber, action: "failed", recordType: "StockItem", name: mapped.productName, reason: "reorder_level must be a valid whole number." });
+      continue;
+    }
+
+    const unitCost = mapped.unitCost ? Number(mapped.unitCost) : 0;
+    if (mapped.unitCost && (!Number.isFinite(unitCost) || unitCost < 0)) {
+      rowResults.push({ rowNumber, action: "failed", recordType: "StockItem", name: mapped.productName, reason: "unit_cost must be a valid positive number when provided." });
+      continue;
+    }
+
+    const expiryDate = mapped.expiryDate ? parseImportDate(mapped.expiryDate) : null;
+    if (mapped.expiryDate && !expiryDate) {
+      rowResults.push({ rowNumber, action: "failed", recordType: "StockItem", name: mapped.productName, reason: "expiry_date must use YYYY-MM-DD when provided." });
+      continue;
+    }
+
+    const branch = await tx.branch.findUnique({ where: { name: mapped.branchName } });
+    if (!branch) {
+      rowResults.push({ rowNumber, action: "failed", recordType: "StockItem", name: mapped.productName, reason: "Branch not found" });
+      continue;
+    }
+
+    const existing = await tx.stockItem.findFirst({
+      where: {
+        productName: mapped.productName,
+        branchId: branch.id
+      }
+    });
+
+    if (existing) {
+      rowResults.push({ rowNumber, action: "skipped", recordType: "StockItem", name: mapped.productName, reason: "Stock item already exists in this branch." });
+      continue;
+    }
+
+    const status = normalizeStockStatus(mapped.status) ?? inferStockStatus(stockLevel, reorderLevel, expiryDate);
+    const valueAtRisk = Number((stockLevel * unitCost).toFixed(2));
+
+    try {
+      await tx.stockItem.create({
+        data: {
+          productName: mapped.productName,
+          category: mapped.category,
+          branchId: branch.id,
+          stockLevel,
+          reorderLevel,
+          status,
+          expiryDate,
+          suggestedAction: getStockImportSuggestedAction(status, mapped.productName, mapped.branchName),
+          valueAtRisk
+        }
+      });
+    } catch (error) {
+      rowResults.push({
+        rowNumber,
+        action: "failed",
+        recordType: "StockItem",
+        name: mapped.productName,
+        reason: error instanceof Error ? `Stock item could not be imported: ${error.message}` : "Stock item could not be imported."
+      });
+      continue;
+    }
+
+    rowResults.push({
+      rowNumber,
+      action: "imported",
+      recordType: "StockItem",
+      name: mapped.productName,
+      reason: `Stock item created with ${status.replace(/_/g, " ").toLowerCase()} status.`
+    });
   }
 
   return summarizeRowResults(rowResults);
@@ -329,7 +437,8 @@ export function getImportExecutionWarnings(batch: ImportBatchForExecution) {
   if (!eligibility.allowed) warnings.push(eligibility.reason);
   if (batch.templateType === "staff-members") warnings.push("Staff rows require matching Branch names to exist before execution.");
   if (batch.templateType === "chronic-patients") warnings.push("Chronic patient rows require matching Branch names, numeric refill cycle days, and unique phone numbers. Missing next refill dates can be estimated during execution.");
-  if (!["branches", "staff-members", "chronic-patients"].includes(batch.templateType)) warnings.push("Only Branches, Staff Members, and Chronic Patients can be executed right now.");
+  if (batch.templateType === "stock-items") warnings.push("Stock rows require matching Branch names plus valid stock_level, reorder_level, unit_cost, and expiry_date values when provided.");
+  if (!["branches", "staff-members", "chronic-patients", "stock-items"].includes(batch.templateType)) warnings.push("Only Branches, Staff Members, Chronic Patients, and Stock Items can be executed right now.");
 
   return warnings;
 }
@@ -344,6 +453,33 @@ function normalizeRiskScore(value?: string) {
   const normalized = value?.trim().toUpperCase();
   if (normalized && Object.values(RiskScore).includes(normalized as RiskScore)) return normalized as RiskScore;
   return RiskScore.MEDIUM;
+}
+
+function normalizeStockStatus(value?: string) {
+  const normalized = value?.trim().toUpperCase().replace(/\s+/g, "_").replace(/-/g, "_");
+  if (normalized && Object.values(StockStatus).includes(normalized as StockStatus)) return normalized as StockStatus;
+  return null;
+}
+
+function inferStockStatus(stockLevel: number, reorderLevel: number, expiryDate: Date | null) {
+  if (expiryDate) {
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const daysToExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / 86_400_000);
+    if (daysToExpiry >= 0 && daysToExpiry <= 90) return StockStatus.NEAR_EXPIRY;
+  }
+
+  if (stockLevel <= reorderLevel) return StockStatus.LOW_STOCK;
+  if (reorderLevel > 0 && stockLevel >= reorderLevel * 4) return StockStatus.OVERSTOCK;
+  return StockStatus.HEALTHY;
+}
+
+function getStockImportSuggestedAction(status: StockStatus, productName: string, branchName: string) {
+  if (status === StockStatus.LOW_STOCK) return `Reorder ${productName} for ${branchName} before patient demand is affected.`;
+  if (status === StockStatus.NEAR_EXPIRY) return `Review ${productName} expiry exposure at ${branchName} and move or promote stock.`;
+  if (status === StockStatus.OVERSTOCK) return `Check transfer opportunities for ${productName} from ${branchName}.`;
+  if (status === StockStatus.DEAD_STOCK) return `Review slow movement and decide whether to discount, transfer, or discontinue ${productName}.`;
+  return `Monitor ${productName} stock level at ${branchName}.`;
 }
 
 function parseImportDate(value: string) {
