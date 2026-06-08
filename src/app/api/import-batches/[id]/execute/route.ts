@@ -4,6 +4,7 @@ import {
   canExecuteImportBatch,
   executeBranchImport,
   executeChronicPatientImport,
+  executeOrderImport,
   executeStockImport,
   executeStaffImport,
   getStoredRows
@@ -40,6 +41,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
       if (batch.templateType === "stock-items") {
         return executeStockImport(tx, rows);
+      }
+
+      if (batch.templateType === "orders") {
+        return executeOrderImport(tx, rows);
       }
 
       return executeStaffImport(tx, rows);

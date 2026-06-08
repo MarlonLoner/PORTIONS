@@ -150,6 +150,9 @@ export function getBatchDetailAiSummary(batch: ImportBatchLike) {
     if (batch.templateType === "stock-items") {
       return `This stock items batch has been imported. Review Stock Intelligence for low stock, near-expiry pressure, skipped duplicates, and branch stock risks.`;
     }
+    if (batch.templateType === "orders") {
+      return `This orders batch has been imported. Review the Order Pipeline for pharmacist review, payment follow-up, dispatch queues, skipped duplicates, and branch order pressure.`;
+    }
     return `This ${template} batch is marked imported. Treat the stored rows and issues as the audit trail for pilot setup.`;
   }
 
@@ -167,6 +170,7 @@ export function getBatchDetailNextActions(batch: ImportBatchLike) {
   if (actions.length === 0 && batch.status !== "APPROVED" && batch.status !== "IMPORTED") actions.push("Confirm data owner and mark approved when ready.");
   if (batch.status === "APPROVED") actions.push("Hold for scheduled pilot import execution.");
   if (batch.status === "IMPORTED" && batch.templateType === "stock-items") actions.push("Review Stock Intelligence and Reorder Command for imported branch stock signals.");
+  if (batch.status === "IMPORTED" && batch.templateType === "orders") actions.push("Review Order Pipeline and AI Brief for imported order action signals.");
 
   return actions;
 }

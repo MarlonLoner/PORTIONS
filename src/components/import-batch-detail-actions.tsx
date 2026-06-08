@@ -140,6 +140,16 @@ export function ImportBatchDetailActions({
               </Link>
             </div>
           ) : null}
+          {templateType === "orders" ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link href="/orders" className="focus-ring rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white">
+                Review Order Pipeline
+              </Link>
+              <Link href="/ai-brief" className="focus-ring rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">
+                Review AI Brief
+              </Link>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>

@@ -1,4 +1,4 @@
-import { PackageType, PatientStatus, RiskScore, StockStatus } from "@prisma/client";
+import { OrderSource, OrderStatus, OrderType, PackageType, PatientStatus, RiskScore, StockStatus } from "@prisma/client";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 type ImportBatchForExecution = {
@@ -18,7 +18,7 @@ type ImportBatchForExecution = {
 export type ImportRowResult = {
   rowNumber: number;
   action: "imported" | "skipped" | "failed";
-  recordType: "Branch" | "StaffMember" | "Patient" | "StockItem";
+  recordType: "Branch" | "StaffMember" | "Patient" | "StockItem" | "Order";
   name: string;
   reason: string;
   phone?: string;
@@ -45,7 +45,7 @@ export function canExecuteImportBatch(batch: ImportBatchForExecution) {
 }
 
 export function getImportExecutionEligibilityChecks(batch: ImportBatchForExecution) {
-  const supportedTemplates = ["branches", "staff-members", "chronic-patients", "stock-items"];
+  const supportedTemplates = ["branches", "staff-members", "chronic-patients", "stock-items", "orders"];
   return [
     {
       label: "Approved status required",
@@ -126,6 +126,24 @@ export function mapStockRow(row: Record<string, string>) {
     unitCost: row.unit_cost?.trim() ?? "",
     status: row.status?.trim() ?? "",
     notes: row.notes?.trim() ?? ""
+  };
+}
+
+export function mapOrderRow(row: Record<string, string>) {
+  return {
+    customerName: row.customer_name?.trim() ?? "",
+    phone: row.phone?.trim() || row.phone_number?.trim() || "+263000000000",
+    source: row.source?.trim() ?? "",
+    branchName: row.branch?.trim() ?? "",
+    orderType: row.order_type?.trim() ?? "",
+    status: row.status?.trim() ?? "",
+    amount: row.amount?.trim() ?? "",
+    assignedStaffName: row.assigned_staff?.trim() ?? "",
+    paymentStatus: row.payment_status?.trim() || "Pending",
+    fulfillmentPreference: row.fulfillment_preference?.trim() || "Collection",
+    notes: row.notes?.trim() ?? "",
+    items: row.items?.trim() ?? "",
+    createdDate: row.created_date?.trim() || row.created_at?.trim() || ""
   };
 }
 
@@ -298,6 +316,123 @@ export async function executeStockImport(tx: PrismaClient | Prisma.TransactionCl
   return summarizeRowResults(rowResults);
 }
 
+export async function executeOrderImport(tx: PrismaClient | Prisma.TransactionClient, rows: Array<Record<string, string>>): Promise<ImportExecutionResult> {
+  const rowResults: ImportRowResult[] = [];
+
+  for (const [index, row] of rows.entries()) {
+    const rowNumber = index + 2;
+    const mapped = mapOrderRow(row);
+
+    if (!mapped.customerName || !mapped.branchName || !mapped.amount) {
+      rowResults.push({ rowNumber, action: "failed", recordType: "Order", name: mapped.customerName || "Unknown customer", reason: "customer_name, branch, and amount are required." });
+      continue;
+    }
+
+    const amount = Number(mapped.amount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      rowResults.push({ rowNumber, action: "failed", recordType: "Order", name: mapped.customerName, reason: "amount must be a valid positive number." });
+      continue;
+    }
+
+    const createdAt = mapped.createdDate ? parseImportDate(mapped.createdDate) : new Date();
+    if (mapped.createdDate && !createdAt) {
+      rowResults.push({ rowNumber, action: "failed", recordType: "Order", name: mapped.customerName, reason: "created_date must use YYYY-MM-DD when provided." });
+      continue;
+    }
+    const orderCreatedAt = createdAt ?? new Date();
+
+    const branch = await tx.branch.findUnique({ where: { name: mapped.branchName } });
+    if (!branch) {
+      rowResults.push({ rowNumber, action: "failed", recordType: "Order", name: mapped.customerName, reason: "Branch not found" });
+      continue;
+    }
+
+    const warnings: string[] = [];
+    const source = normalizeOrderSource(mapped.source);
+    if (mapped.source && !source.matched) warnings.push(`Source '${mapped.source}' was not recognized; defaulted to ${source.value}.`);
+
+    const orderType = normalizeOrderType(mapped.orderType);
+    if (mapped.orderType && !orderType.matched) warnings.push(`Order type '${mapped.orderType}' was not recognized; defaulted to ${orderType.value}.`);
+
+    const status = normalizeOrderStatus(mapped.status);
+    if (mapped.status && !status.matched) warnings.push(`Status '${mapped.status}' was not recognized; defaulted to ${status.value}.`);
+
+    const assignedStaff = mapped.assignedStaffName
+      ? await tx.staffMember.findFirst({
+          where: {
+            name: mapped.assignedStaffName,
+            OR: [{ branchId: branch.id }, { branchId: null }]
+          }
+        })
+      : null;
+    if (mapped.assignedStaffName && !assignedStaff) warnings.push(`Assigned staff '${mapped.assignedStaffName}' was not found; order imported without assigned staff.`);
+
+    const dayStart = new Date(orderCreatedAt);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+    const existing = await tx.order.findFirst({
+      where: {
+        customerName: mapped.customerName,
+        branchId: branch.id,
+        amount,
+        createdAt: {
+          gte: dayStart,
+          lt: dayEnd
+        }
+      }
+    });
+
+    if (existing) {
+      rowResults.push({ rowNumber, action: "skipped", recordType: "Order", name: mapped.customerName, reason: "Order with same customer, branch, amount, and created date already exists." });
+      continue;
+    }
+
+    try {
+      await tx.order.create({
+        data: {
+          customerName: mapped.customerName,
+          phone: mapped.phone,
+          source: source.value,
+          branchId: branch.id,
+          type: orderType.value,
+          status: status.value,
+          amount,
+          createdAt: orderCreatedAt,
+          assignedStaffId: assignedStaff?.id,
+          paymentStatus: mapped.paymentStatus,
+          fulfillmentPreference: mapped.fulfillmentPreference,
+          internalNotes: buildOrderInternalNotes(mapped.notes, mapped.items, warnings),
+          items: {
+            create: parseOrderItems(mapped.items, amount)
+          }
+        }
+      });
+    } catch (error) {
+      rowResults.push({
+        rowNumber,
+        action: "failed",
+        recordType: "Order",
+        name: mapped.customerName,
+        reason: error instanceof Error ? `Order could not be imported: ${error.message}` : "Order could not be imported."
+      });
+      continue;
+    }
+
+    rowResults.push({
+      rowNumber,
+      action: "imported",
+      recordType: "Order",
+      name: mapped.customerName,
+      warnings,
+      reason: `Order imported with ${status.value.replace(/_/g, " ").toLowerCase()} status.`
+    });
+  }
+
+  return summarizeRowResults(rowResults);
+}
+
 export async function executeChronicPatientImport(tx: PrismaClient | Prisma.TransactionClient, rows: Array<Record<string, string>>): Promise<ImportExecutionResult> {
   const rowResults: ImportRowResult[] = [];
 
@@ -438,7 +573,8 @@ export function getImportExecutionWarnings(batch: ImportBatchForExecution) {
   if (batch.templateType === "staff-members") warnings.push("Staff rows require matching Branch names to exist before execution.");
   if (batch.templateType === "chronic-patients") warnings.push("Chronic patient rows require matching Branch names, numeric refill cycle days, and unique phone numbers. Missing next refill dates can be estimated during execution.");
   if (batch.templateType === "stock-items") warnings.push("Stock rows require matching Branch names plus valid stock_level, reorder_level, unit_cost, and expiry_date values when provided.");
-  if (!["branches", "staff-members", "chronic-patients", "stock-items"].includes(batch.templateType)) warnings.push("Only Branches, Staff Members, Chronic Patients, and Stock Items can be executed right now.");
+  if (batch.templateType === "orders") warnings.push("Order rows require matching Branch names and valid amount values. Unknown source, type, status, or staff values will default safely with row warnings.");
+  if (!["branches", "staff-members", "chronic-patients", "stock-items", "orders"].includes(batch.templateType)) warnings.push("Only Branches, Staff Members, Chronic Patients, Stock Items, and Orders can be executed right now.");
 
   return warnings;
 }
@@ -481,6 +617,66 @@ function getStockImportSuggestedAction(status: StockStatus, productName: string,
   if (status === StockStatus.OVERSTOCK) return `Check transfer opportunities for ${productName} from ${branchName}.`;
   if (status === StockStatus.DEAD_STOCK) return `Review slow movement and decide whether to discount, transfer, or discontinue ${productName}.`;
   return `Monitor ${productName} stock level at ${branchName}.`;
+}
+
+function normalizeOrderSource(value?: string): { value: OrderSource; matched: boolean } {
+  const normalized = value?.trim().toUpperCase().replace(/\s+/g, "_").replace(/-/g, "_");
+  if (normalized && Object.values(OrderSource).includes(normalized as OrderSource)) return { value: normalized as OrderSource, matched: true };
+  return { value: OrderSource.WEBSITE, matched: !normalized };
+}
+
+function normalizeOrderType(value?: string): { value: OrderType; matched: boolean } {
+  const normalized = value?.trim().toUpperCase().replace(/\s+/g, "_").replace(/-/g, "_");
+  if (normalized && Object.values(OrderType).includes(normalized as OrderType)) return { value: normalized as OrderType, matched: true };
+  return { value: OrderType.PRESCRIPTION, matched: !normalized };
+}
+
+function normalizeOrderStatus(value?: string): { value: OrderStatus; matched: boolean } {
+  const normalized = value?.trim().toUpperCase().replace(/\s+/g, "_").replace(/-/g, "_");
+  if (normalized && Object.values(OrderStatus).includes(normalized as OrderStatus)) return { value: normalized as OrderStatus, matched: true };
+  return { value: OrderStatus.NEW, matched: !normalized };
+}
+
+function parseOrderItems(items: string, amount: number) {
+  if (!items.trim()) {
+    return [{
+      productName: "Imported order item",
+      category: "Imported",
+      quantity: 1,
+      unitPrice: amount
+    }];
+  }
+
+  return items
+    .split(";")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const quantityMatch = /\bx\s*(\d+)\b/i.exec(item) ?? /\bqty\s*:?\s*(\d+)\b/i.exec(item);
+      const priceMatch = /@\s*(\d+(?:\.\d{1,2})?)/.exec(item);
+      const quantity = quantityMatch ? Math.max(1, Number(quantityMatch[1])) : 1;
+      const unitPrice = priceMatch ? Number(priceMatch[1]) : amount;
+      const productName = item
+        .replace(/\bx\s*\d+\b/gi, "")
+        .replace(/\bqty\s*:?\s*\d+\b/gi, "")
+        .replace(/@\s*\d+(?:\.\d{1,2})?/g, "")
+        .trim() || "Imported order item";
+
+      return {
+        productName,
+        category: "Imported",
+        quantity,
+        unitPrice: Number.isFinite(unitPrice) ? unitPrice : amount
+      };
+    });
+}
+
+function buildOrderInternalNotes(notes: string, items: string, warnings: string[]) {
+  const parts = [];
+  if (notes) parts.push(notes);
+  if (items) parts.push(`Imported items: ${items}`);
+  if (warnings.length > 0) parts.push(`Import warnings: ${warnings.join(" ")}`);
+  return parts.join("\n") || null;
 }
 
 function parseImportDate(value: string) {
