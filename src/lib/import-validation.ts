@@ -15,7 +15,21 @@ export type CsvRowIssue = {
 const numericFields = new Set(["branch_count", "stock_level", "reorder_level", "amount", "refill_cycle_days", "unit_cost"]);
 
 function normalizeHeader(value: string) {
-  return value.trim().replace(/^\uFEFF/, "");
+  return normalizeCsvValue(value).replace(/^\uFEFF/, "");
+}
+
+function normalizeCsvValue(value: string) {
+  const cleaned = value
+    .replace(/^\uFEFF/, "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/[\u2010-\u2015\u2212]/g, "-")
+    .trim();
+
+  if (cleaned.length >= 2 && cleaned.startsWith('"') && cleaned.endsWith('"')) {
+    return cleaned.slice(1, -1).replace(/""/g, '"').trim();
+  }
+
+  return cleaned;
 }
 
 function parseCsvLine(line: string) {
@@ -33,19 +47,21 @@ function parseCsvLine(line: string) {
     } else if (char === '"') {
       insideQuotes = !insideQuotes;
     } else if (char === "," && !insideQuotes) {
-      values.push(current.trim());
+      values.push(normalizeCsvValue(current));
       current = "";
     } else {
       current += char;
     }
   }
 
-  values.push(current.trim());
+  values.push(normalizeCsvValue(current));
   return values;
 }
 
 export function parseCsv(input: string): ParsedCsv {
   const lines = input
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
     .split(/\r?\n/)
     .map((line) => line.trimEnd())
     .filter((line) => line.trim().length > 0);
@@ -58,7 +74,7 @@ export function parseCsv(input: string): ParsedCsv {
   const rows = lines.slice(1).map((line) => {
     const values = parseCsvLine(line);
     return headers.reduce<Record<string, string>>((row, header, index) => {
-      row[header] = values[index]?.trim() ?? "";
+      row[header] = normalizeCsvValue(values[index] ?? "");
       return row;
     }, {});
   });
@@ -85,8 +101,21 @@ export function validateCsvColumns(headers: string[], template: ImportTemplate) 
   };
 }
 
-function isValidDate(value: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00`).getTime());
+export function isValidYyyyMmDd(value: string) {
+  const cleaned = normalizeCsvValue(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(cleaned);
+  if (!match) return false;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
 }
 
 function isNumeric(value: string) {
@@ -113,13 +142,14 @@ export function validateCsvRows(rows: Record<string, string>[], template: Import
     });
 
     Object.entries(row).forEach(([field, value]) => {
-      if (!value.trim()) return;
+      const cleanedValue = normalizeCsvValue(value);
+      if (!cleanedValue) return;
 
-      if (field.includes("date") && !isValidDate(value)) {
-        issues.push({ rowNumber, field, message: "Date should use YYYY-MM-DD.", type: "date" });
+      if (field.includes("date") && !isValidYyyyMmDd(cleanedValue)) {
+        issues.push({ rowNumber, field, message: `${field} should use YYYY-MM-DD.`, type: "date" });
       }
 
-      if (numericFields.has(field) && !isNumeric(value)) {
+      if (numericFields.has(field) && !isNumeric(cleanedValue)) {
         issues.push({ rowNumber, field, message: "Value should be numeric.", type: "numeric" });
       }
     });

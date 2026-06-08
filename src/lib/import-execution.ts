@@ -462,6 +462,8 @@ function normalizeStockStatus(value?: string) {
 }
 
 function inferStockStatus(stockLevel: number, reorderLevel: number, expiryDate: Date | null) {
+  if (stockLevel <= reorderLevel) return StockStatus.LOW_STOCK;
+
   if (expiryDate) {
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
@@ -469,7 +471,6 @@ function inferStockStatus(stockLevel: number, reorderLevel: number, expiryDate: 
     if (daysToExpiry >= 0 && daysToExpiry <= 90) return StockStatus.NEAR_EXPIRY;
   }
 
-  if (stockLevel <= reorderLevel) return StockStatus.LOW_STOCK;
   if (reorderLevel > 0 && stockLevel >= reorderLevel * 4) return StockStatus.OVERSTOCK;
   return StockStatus.HEALTHY;
 }
@@ -483,9 +484,32 @@ function getStockImportSuggestedAction(status: StockStatus, productName: string,
 }
 
 function parseImportDate(value: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const date = new Date(`${value}T00:00:00.000Z`);
-  return Number.isNaN(date.getTime()) ? null : date;
+  const cleaned = cleanImportValue(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(cleaned);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+function cleanImportValue(value: string) {
+  return value
+    .replace(/^\uFEFF/, "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/[\u2010-\u2015\u2212]/g, "-")
+    .trim();
 }
 
 function deriveNextRefillDate(nextRefillDate: string, lastRefillDate: string, cycleDays: number) {
