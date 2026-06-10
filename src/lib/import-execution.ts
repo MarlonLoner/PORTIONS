@@ -49,6 +49,12 @@ export function getImportExecutionEligibilityChecks(batch: ImportBatchForExecuti
   const supportedTemplates = ["branches", "staff-members", "chronic-patients", "stock-items", "orders", "follow-up-tasks"];
   return [
     {
+      label: "Not already imported",
+      passed: !batch.importedAt && batch.status !== "IMPORTED",
+      detail: batch.importedAt || batch.status === "IMPORTED" ? "Batch has already been imported." : "Batch has not been imported yet.",
+      failMessage: "This batch has already been imported."
+    },
+    {
       label: "Approved status required",
       passed: batch.status === "APPROVED",
       detail: batch.status === "APPROVED" ? "Batch status is APPROVED." : `Current status is ${batch.status}.`,
@@ -71,12 +77,6 @@ export function getImportExecutionEligibilityChecks(batch: ImportBatchForExecuti
       passed: batch.validationStatus !== "Invalid",
       detail: `Validation status is ${batch.validationStatus}.`,
       failMessage: "This batch needs cleanup before execution."
-    },
-    {
-      label: "Not already imported",
-      passed: !batch.importedAt && batch.status !== "IMPORTED",
-      detail: batch.importedAt || batch.status === "IMPORTED" ? "Batch has already been imported." : "Batch has not been imported yet.",
-      failMessage: "This batch has already been imported."
     }
   ];
 }

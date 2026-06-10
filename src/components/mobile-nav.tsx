@@ -40,6 +40,11 @@ const navItems = [
   { href: "/settings", label: "Settings", icon: Settings }
 ];
 
+function isActivePath(pathname: string, href: string) {
+  if (href === "/imports") return pathname === "/imports" || pathname === "/imports/upload";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function MobileNav() {
   const pathname = usePathname();
 
@@ -48,7 +53,7 @@ export function MobileNav() {
       <div className="flex gap-2 overflow-x-auto pb-1">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const active = pathname.startsWith(item.href);
+          const active = isActivePath(pathname, item.href);
 
           return (
             <Link

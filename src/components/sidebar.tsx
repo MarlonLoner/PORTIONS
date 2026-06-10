@@ -41,6 +41,11 @@ const navItems = [
   { href: "/settings", label: "Settings", icon: Settings }
 ];
 
+function isActivePath(pathname: string, href: string) {
+  if (href === "/imports") return pathname === "/imports" || pathname === "/imports/upload";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function Sidebar() {
   const pathname = usePathname();
 
@@ -58,7 +63,7 @@ export function Sidebar() {
       <nav className="flex-1 space-y-1 px-4 py-4">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const active = pathname.startsWith(item.href);
+          const active = isActivePath(pathname, item.href);
 
           return (
             <Link

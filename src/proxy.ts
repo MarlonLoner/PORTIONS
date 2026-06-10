@@ -12,6 +12,8 @@ const protectedPrefixes = [
   "/reports",
   "/settings",
   "/pilot-requests",
+  "/pilot-command",
+  "/executive-pack",
   "/onboarding",
   "/imports"
 ];
@@ -52,6 +54,8 @@ export const config = {
     "/reports/:path*",
     "/settings/:path*",
     "/pilot-requests/:path*",
+    "/pilot-command/:path*",
+    "/executive-pack/:path*",
     "/onboarding/:path*",
     "/imports/:path*"
   ]
