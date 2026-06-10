@@ -538,6 +538,30 @@ export async function getPilotRequestsData() {
   });
 }
 
+export async function getPilotCommandData() {
+  const [branches, staff, patients, orders, followUps, stockItems, reports, importBatches] = await Promise.all([
+    prisma.branch.findMany({
+      include: {
+        patients: true,
+        orders: true,
+        followUpTasks: true,
+        stockItems: true,
+        staffMembers: true
+      },
+      orderBy: { name: "asc" }
+    }),
+    prisma.staffMember.findMany({ include: { branch: true }, orderBy: { name: "asc" } }),
+    prisma.patient.findMany({ include: { branch: true, followUpTasks: true }, orderBy: { nextRefillDate: "asc" } }),
+    prisma.order.findMany({ include: { branch: true, assignedStaff: true, items: true }, orderBy: { createdAt: "desc" } }),
+    prisma.followUpTask.findMany({ include: { branch: true, patient: true, assignedStaff: true }, orderBy: { dueDate: "asc" } }),
+    prisma.stockItem.findMany({ include: { branch: true }, orderBy: [{ status: "asc" }, { productName: "asc" }] }),
+    prisma.report.findMany({ orderBy: { lastGeneratedAt: "desc" } }),
+    prisma.importBatch.findMany({ orderBy: { createdAt: "desc" } })
+  ]);
+
+  return { branches, staff, patients, orders, followUps, stockItems, reports, importBatches };
+}
+
 export async function getImportBatchesData() {
   return prisma.importBatch.findMany({
     orderBy: { createdAt: "desc" }
