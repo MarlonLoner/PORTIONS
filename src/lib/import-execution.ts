@@ -1,4 +1,4 @@
-import { OrderSource, OrderStatus, OrderType, PackageType, PatientStatus, RiskScore, StockStatus } from "@prisma/client";
+import { FollowUpStatus, FollowUpType, OrderSource, OrderStatus, OrderType, PackageType, PatientStatus, RiskScore, StockStatus } from "@prisma/client";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 type ImportBatchForExecution = {
@@ -18,11 +18,12 @@ type ImportBatchForExecution = {
 export type ImportRowResult = {
   rowNumber: number;
   action: "imported" | "skipped" | "failed";
-  recordType: "Branch" | "StaffMember" | "Patient" | "StockItem" | "Order";
+  recordType: "Branch" | "StaffMember" | "Patient" | "StockItem" | "Order" | "FollowUpTask";
   name: string;
   reason: string;
   phone?: string;
   scheduleNote?: string;
+  taskType?: string;
   warnings?: string[];
 };
 
@@ -45,7 +46,7 @@ export function canExecuteImportBatch(batch: ImportBatchForExecution) {
 }
 
 export function getImportExecutionEligibilityChecks(batch: ImportBatchForExecution) {
-  const supportedTemplates = ["branches", "staff-members", "chronic-patients", "stock-items", "orders"];
+  const supportedTemplates = ["branches", "staff-members", "chronic-patients", "stock-items", "orders", "follow-up-tasks"];
   return [
     {
       label: "Approved status required",
@@ -144,6 +145,21 @@ export function mapOrderRow(row: Record<string, string>) {
     notes: row.notes?.trim() ?? "",
     items: row.items?.trim() ?? "",
     createdDate: row.created_date?.trim() || row.created_at?.trim() || ""
+  };
+}
+
+export function mapFollowUpTaskRow(row: Record<string, string>) {
+  return {
+    customerName: row.customer_name?.trim() ?? "",
+    phone: row.phone_number?.trim() || row.phone?.trim() || "",
+    taskType: row.task_type?.trim() ?? "",
+    branchName: row.branch?.trim() ?? "",
+    dueDate: row.due_date?.trim() ?? "",
+    status: row.status?.trim() ?? "",
+    assignedStaffName: row.assigned_staff?.trim() ?? "",
+    suggestedAction: row.suggested_action?.trim() ?? "",
+    priority: row.priority?.trim() ?? "",
+    notes: row.notes?.trim() ?? ""
   };
 }
 
@@ -433,6 +449,112 @@ export async function executeOrderImport(tx: PrismaClient | Prisma.TransactionCl
   return summarizeRowResults(rowResults);
 }
 
+export async function executeFollowUpTaskImport(tx: PrismaClient | Prisma.TransactionClient, rows: Array<Record<string, string>>): Promise<ImportExecutionResult> {
+  const rowResults: ImportRowResult[] = [];
+
+  for (const [index, row] of rows.entries()) {
+    const rowNumber = index + 2;
+    const mapped = mapFollowUpTaskRow(row);
+
+    if (!mapped.customerName || !mapped.taskType || !mapped.branchName || !mapped.dueDate) {
+      rowResults.push({ rowNumber, action: "failed", recordType: "FollowUpTask", name: mapped.customerName || "Unknown customer", taskType: mapped.taskType, reason: "customer_name, task_type, branch, and due_date are required." });
+      continue;
+    }
+
+    const dueDate = parseImportDate(mapped.dueDate);
+    if (!dueDate) {
+      rowResults.push({ rowNumber, action: "failed", recordType: "FollowUpTask", name: mapped.customerName, taskType: mapped.taskType, reason: "due_date must use YYYY-MM-DD." });
+      continue;
+    }
+
+    const branch = await tx.branch.findUnique({ where: { name: mapped.branchName } });
+    if (!branch) {
+      rowResults.push({ rowNumber, action: "failed", recordType: "FollowUpTask", name: mapped.customerName, phone: mapped.phone, taskType: mapped.taskType, reason: "Branch not found" });
+      continue;
+    }
+
+    const warnings: string[] = [];
+    const type = normalizeFollowUpType(mapped.taskType);
+    if (mapped.taskType && !type.matched) warnings.push(`Task type '${mapped.taskType}' was not recognized; defaulted to ${type.value}.`);
+
+    const status = normalizeFollowUpStatus(mapped.status);
+    if (mapped.status && !status.matched) warnings.push(`Status '${mapped.status}' was not recognized; defaulted to ${status.value}.`);
+
+    const patient = await findImportPatient(tx, mapped.customerName, mapped.phone);
+    if (!patient) warnings.push("No matching patient found.");
+
+    const assignedStaff = mapped.assignedStaffName
+      ? await tx.staffMember.findFirst({
+          where: {
+            name: mapped.assignedStaffName,
+            OR: [{ branchId: branch.id }, { branchId: null }]
+          }
+        })
+      : null;
+    if (mapped.assignedStaffName && !assignedStaff) warnings.push(`Assigned staff '${mapped.assignedStaffName}' was not found; task imported without assigned staff.`);
+
+    const existing = await tx.followUpTask.findFirst({
+      where: {
+        type: type.value,
+        branchId: branch.id,
+        dueDate,
+        OR: patient
+          ? [{ patientId: patient.id }, { customerName: mapped.customerName }]
+          : [{ customerName: mapped.customerName }]
+      }
+    });
+
+    if (existing) {
+      rowResults.push({ rowNumber, action: "skipped", recordType: "FollowUpTask", name: mapped.customerName, phone: mapped.phone, taskType: type.value, reason: "Follow-up task with same patient/customer, task type, branch, and due date already exists." });
+      continue;
+    }
+
+    const suggestedAction = mapped.suggestedAction || getDefaultFollowUpAction(type.value, mapped.customerName);
+    const suggestedMessage = buildFollowUpSuggestedMessage(mapped.customerName, type.value, mapped.notes, mapped.priority);
+
+    try {
+      await tx.followUpTask.create({
+        data: {
+          patientId: patient?.id,
+          customerName: patient?.name ?? mapped.customerName,
+          type: type.value,
+          status: status.value,
+          reason: buildFollowUpReason(type.value, mapped.notes, mapped.priority),
+          branchId: branch.id,
+          dueDate,
+          suggestedAction,
+          suggestedMessage,
+          assignedStaffId: assignedStaff?.id
+        }
+      });
+    } catch (error) {
+      rowResults.push({
+        rowNumber,
+        action: "failed",
+        recordType: "FollowUpTask",
+        name: mapped.customerName,
+        phone: mapped.phone,
+        taskType: type.value,
+        reason: error instanceof Error ? `Follow-up task could not be imported: ${error.message}` : "Follow-up task could not be imported."
+      });
+      continue;
+    }
+
+    rowResults.push({
+      rowNumber,
+      action: "imported",
+      recordType: "FollowUpTask",
+      name: patient?.name ?? mapped.customerName,
+      phone: mapped.phone || patient?.phone,
+      taskType: type.value,
+      warnings,
+      reason: `Follow-up task imported as ${type.value.replace(/_/g, " ").toLowerCase()}.`
+    });
+  }
+
+  return summarizeRowResults(rowResults);
+}
+
 export async function executeChronicPatientImport(tx: PrismaClient | Prisma.TransactionClient, rows: Array<Record<string, string>>): Promise<ImportExecutionResult> {
   const rowResults: ImportRowResult[] = [];
 
@@ -574,7 +696,8 @@ export function getImportExecutionWarnings(batch: ImportBatchForExecution) {
   if (batch.templateType === "chronic-patients") warnings.push("Chronic patient rows require matching Branch names, numeric refill cycle days, and unique phone numbers. Missing next refill dates can be estimated during execution.");
   if (batch.templateType === "stock-items") warnings.push("Stock rows require matching Branch names plus valid stock_level, reorder_level, unit_cost, and expiry_date values when provided.");
   if (batch.templateType === "orders") warnings.push("Order rows require matching Branch names and valid amount values. Unknown source, type, status, or staff values will default safely with row warnings.");
-  if (!["branches", "staff-members", "chronic-patients", "stock-items", "orders"].includes(batch.templateType)) warnings.push("Only Branches, Staff Members, Chronic Patients, Stock Items, and Orders can be executed right now.");
+  if (batch.templateType === "follow-up-tasks") warnings.push("Follow-up task rows require matching Branch names and valid due_date values. Unknown type, status, patient, or staff values will default or import with row warnings where safe.");
+  if (!["branches", "staff-members", "chronic-patients", "stock-items", "orders", "follow-up-tasks"].includes(batch.templateType)) warnings.push("Only Branches, Staff Members, Chronic Patients, Stock Items, Orders, and Follow-Up Tasks can be executed right now.");
 
   return warnings;
 }
@@ -677,6 +800,60 @@ function buildOrderInternalNotes(notes: string, items: string, warnings: string[
   if (items) parts.push(`Imported items: ${items}`);
   if (warnings.length > 0) parts.push(`Import warnings: ${warnings.join(" ")}`);
   return parts.join("\n") || null;
+}
+
+function normalizeFollowUpType(value?: string): { value: FollowUpType; matched: boolean } {
+  const normalized = value?.trim().toUpperCase().replace(/\s+/g, "_").replace(/-/g, "_");
+  if (normalized && Object.values(FollowUpType).includes(normalized as FollowUpType)) return { value: normalized as FollowUpType, matched: true };
+  return { value: FollowUpType.DUE_TODAY, matched: !normalized };
+}
+
+function normalizeFollowUpStatus(value?: string): { value: FollowUpStatus; matched: boolean } {
+  const normalized = value?.trim().toUpperCase().replace(/\s+/g, "_").replace(/-/g, "_");
+  if (normalized && Object.values(FollowUpStatus).includes(normalized as FollowUpStatus)) return { value: normalized as FollowUpStatus, matched: true };
+  return { value: FollowUpStatus.PENDING, matched: !normalized };
+}
+
+async function findImportPatient(tx: PrismaClient | Prisma.TransactionClient, customerName: string, phone: string) {
+  if (phone) {
+    const patient = await tx.patient.findFirst({ where: { phone } });
+    if (patient) return patient;
+  }
+
+  const matches = await tx.patient.findMany({
+    where: { name: customerName },
+    take: 2
+  });
+
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function getDefaultFollowUpAction(type: FollowUpType, customerName: string) {
+  if (type === FollowUpType.OVERDUE) return `Call ${customerName} and recover the overdue refill before marking the patient at risk.`;
+  if (type === FollowUpType.PRESCRIPTION_RENEWAL_NEEDED) return `Request updated prescription details from ${customerName} and route to pharmacist review.`;
+  if (type === FollowUpType.PAYMENT_PENDING) return `Send a payment reminder to ${customerName} and confirm proof of payment.`;
+  if (type === FollowUpType.DELIVERY_CONFIRMATION) return `Confirm delivery or collection completion with ${customerName}.`;
+  if (type === FollowUpType.LOST_PATIENT_REVIVAL) return `Contact ${customerName} with a revival message and offer delivery or branch collection.`;
+  return `Contact ${customerName} today and confirm the next refill or support action.`;
+}
+
+function buildFollowUpReason(type: FollowUpType, notes: string, priority: string) {
+  const parts = [type.replace(/_/g, " ").toLowerCase()];
+  if (priority) parts.push(`Priority: ${priority}`);
+  if (notes) parts.push(notes);
+  return parts.join(" | ");
+}
+
+function buildFollowUpSuggestedMessage(customerName: string, type: FollowUpType, notes: string, priority: string) {
+  const firstName = customerName.split(" ")[0] || customerName;
+  const context = [priority ? `Priority: ${priority}.` : "", notes].filter(Boolean).join(" ");
+
+  if (type === FollowUpType.OVERDUE) return `Hi ${firstName}, this is PORTIONS Pharmacy following up on your overdue refill. We can prepare it for branch collection or delivery today. ${context}`.trim();
+  if (type === FollowUpType.PRESCRIPTION_RENEWAL_NEEDED) return `Hi ${firstName}, your prescription may need renewal before we prepare your next medicine pack. Please send the latest prescription or let us help you arrange review. ${context}`.trim();
+  if (type === FollowUpType.PAYMENT_PENDING) return `Hi ${firstName}, your pharmacy order is ready for payment confirmation. Please send proof of payment so we can continue processing. ${context}`.trim();
+  if (type === FollowUpType.DELIVERY_CONFIRMATION) return `Hi ${firstName}, please confirm if your delivery or collection was completed successfully. ${context}`.trim();
+  if (type === FollowUpType.LOST_PATIENT_REVIVAL) return `Hi ${firstName}, we have not heard from you in a while and would like to help restart your refill support. We can arrange delivery or branch collection. ${context}`.trim();
+  return `Hi ${firstName}, this is PORTIONS Pharmacy reminding you about your refill/support follow-up due today. ${context}`.trim();
 }
 
 function parseImportDate(value: string) {

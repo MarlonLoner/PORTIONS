@@ -4,6 +4,7 @@ import {
   canExecuteImportBatch,
   executeBranchImport,
   executeChronicPatientImport,
+  executeFollowUpTaskImport,
   executeOrderImport,
   executeStockImport,
   executeStaffImport,
@@ -45,6 +46,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
       if (batch.templateType === "orders") {
         return executeOrderImport(tx, rows);
+      }
+
+      if (batch.templateType === "follow-up-tasks") {
+        return executeFollowUpTaskImport(tx, rows);
       }
 
       return executeStaffImport(tx, rows);

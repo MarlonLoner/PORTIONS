@@ -169,6 +169,11 @@ export default async function ImportBatchDetailPage({ params }: { params: Promis
               Next operational action: review the Order Pipeline and AI Brief to confirm imported orders are visible for payment, review, and dispatch follow-up.
             </p>
           ) : null}
+          {batch.templateType === "follow-up-tasks" ? (
+            <p className="mt-4 rounded-lg bg-clinical-50 p-3 text-sm font-semibold leading-6 text-clinical-900">
+              Next operational action: review the Follow-Up Queue and Chronic Revenue Engine to confirm imported tasks are ready for recovery action.
+            </p>
+          ) : null}
         </section>
       ) : null}
 
@@ -252,6 +257,7 @@ function ExecutionResultRow({ result }: { result: ImportRowResult }) {
         <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] ring-1 ${className}`}>{status}</span>
         <p className="text-sm font-semibold text-navy-950">Row {result.rowNumber}: {result.name}</p>
         {result.phone ? <span className="text-xs font-semibold text-slate-500">{result.phone}</span> : null}
+        {result.taskType ? <span className="text-xs font-semibold text-clinical-700">{result.taskType.replace(/_/g, " ").toLowerCase()}</span> : null}
       </div>
       <p className="mt-2 text-sm leading-6 text-slate-700">{result.reason}</p>
       {result.scheduleNote ? <p className="mt-1 text-xs font-semibold leading-5 text-clinical-800">Schedule: {result.scheduleNote}</p> : null}

@@ -153,6 +153,9 @@ export function getBatchDetailAiSummary(batch: ImportBatchLike) {
     if (batch.templateType === "orders") {
       return `This orders batch has been imported. Review the Order Pipeline for pharmacist review, payment follow-up, dispatch queues, skipped duplicates, and branch order pressure.`;
     }
+    if (batch.templateType === "follow-up-tasks") {
+      return `This follow-up tasks batch has been imported. Review the Follow-Up Queue for due, overdue, payment, delivery, renewal, and lost-patient recovery actions.`;
+    }
     return `This ${template} batch is marked imported. Treat the stored rows and issues as the audit trail for pilot setup.`;
   }
 
@@ -171,6 +174,7 @@ export function getBatchDetailNextActions(batch: ImportBatchLike) {
   if (batch.status === "APPROVED") actions.push("Hold for scheduled pilot import execution.");
   if (batch.status === "IMPORTED" && batch.templateType === "stock-items") actions.push("Review Stock Intelligence and Reorder Command for imported branch stock signals.");
   if (batch.status === "IMPORTED" && batch.templateType === "orders") actions.push("Review Order Pipeline and AI Brief for imported order action signals.");
+  if (batch.status === "IMPORTED" && batch.templateType === "follow-up-tasks") actions.push("Review Follow-Up Queue and Chronic Revenue Engine for imported recovery tasks.");
 
   return actions;
 }

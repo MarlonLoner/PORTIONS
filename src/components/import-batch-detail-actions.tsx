@@ -150,6 +150,16 @@ export function ImportBatchDetailActions({
               </Link>
             </div>
           ) : null}
+          {templateType === "follow-up-tasks" ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link href="/follow-ups" className="focus-ring rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white">
+                Review Follow-Up Queue
+              </Link>
+              <Link href="/patients" className="focus-ring rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">
+                Review Chronic Revenue Engine
+              </Link>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>
@@ -165,6 +175,7 @@ function ExecutionResultLine({ result }: { result: ImportRowResult }) {
       <p className="text-xs font-semibold leading-5 text-navy-950">
         Row {result.rowNumber}: {status} {result.name}
         {result.phone ? ` (${result.phone})` : ""}
+        {result.taskType ? ` - ${result.taskType.replace(/_/g, " ").toLowerCase()}` : ""}
       </p>
       <p className="text-xs leading-5 text-slate-700">{result.reason}</p>
       {result.scheduleNote ? <p className="text-xs font-semibold leading-5 text-clinical-800">Schedule: {result.scheduleNote}</p> : null}
