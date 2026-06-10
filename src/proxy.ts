@@ -3,6 +3,7 @@ import { DEMO_ACCESS_COOKIE, isValidDemoAccessToken } from "@/lib/demo-auth";
 
 const protectedPrefixes = [
   "/dashboard",
+  "/demo-script",
   "/ai-brief",
   "/patients",
   "/follow-ups",
@@ -45,6 +46,7 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     "/dashboard/:path*",
+    "/demo-script/:path*",
     "/ai-brief/:path*",
     "/patients/:path*",
     "/follow-ups/:path*",
