@@ -231,3 +231,61 @@ export function getPrintMetadata(data: ExecutivePackData) {
     generatedAt
   };
 }
+
+export function getBranchPerformanceChartData(data: ExecutivePackData) {
+  return data.branches.map((branch) => {
+    const revenue = branch.orders.reduce((sum, order) => sum + money(order.amount), 0);
+    const orders = branch.orders.length;
+    const overdue = branch.followUpTasks.filter((task) => task.status === FollowUpStatus.PENDING && task.dueDate < startOfToday()).length;
+    const stockAlerts = branch.stockItems.filter((item) => item.status !== StockStatus.HEALTHY).length;
+    const attentionScore = overdue * 3 + stockAlerts * 2 + (branch.staffResponseScore < 82 ? 4 : 0);
+
+    return {
+      label: branch.name,
+      value: Math.round(revenue),
+      secondaryValue: orders,
+      detail: `${orders} orders | attention ${attentionScore}`
+    };
+  });
+}
+
+export function getOrderPipelineChartData(data: ExecutivePackData) {
+  const statuses: Array<{ label: string; status: OrderStatus }> = [
+    { label: "New", status: OrderStatus.NEW },
+    { label: "Review", status: OrderStatus.PHARMACIST_REVIEW },
+    { label: "Quoted", status: OrderStatus.QUOTED },
+    { label: "Awaiting Payment", status: OrderStatus.AWAITING_PAYMENT },
+    { label: "Paid", status: OrderStatus.PAID },
+    { label: "Packed", status: OrderStatus.PACKED },
+    { label: "Dispatched", status: OrderStatus.DISPATCHED },
+    { label: "Delivered", status: OrderStatus.DELIVERED }
+  ];
+
+  return statuses.map((item) => ({
+    label: item.label,
+    value: data.orders.filter((order) => order.status === item.status).length
+  }));
+}
+
+export function getStockRiskChartData(data: ExecutivePackData) {
+  const statuses: Array<{ label: string; status: StockStatus }> = [
+    { label: "Healthy", status: StockStatus.HEALTHY },
+    { label: "Low Stock", status: StockStatus.LOW_STOCK },
+    { label: "Near Expiry", status: StockStatus.NEAR_EXPIRY },
+    { label: "Overstock", status: StockStatus.OVERSTOCK },
+    { label: "Dead Stock", status: StockStatus.DEAD_STOCK }
+  ];
+
+  return statuses.map((item) => ({
+    label: item.label,
+    value: data.stockItems.filter((stock) => stock.status === item.status).length
+  }));
+}
+
+export function getExecutiveValueSnapshotData(data: ExecutivePackData) {
+  return getValueCreatedSummary(data).map((item) => ({
+    label: item.label,
+    value: item.value,
+    detail: item.countOnly ? "Count" : "USD estimate"
+  }));
+}

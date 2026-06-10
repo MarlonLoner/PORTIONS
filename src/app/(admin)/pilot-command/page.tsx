@@ -14,19 +14,24 @@ import {
   UsersRound
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { HorizontalBarChart, ProgressTimelineChart } from "@/components/simple-charts";
 import { getPilotCommandData as loadPilotCommandData } from "@/lib/data";
 import { formatCurrency } from "@/lib/format";
 import {
   getDataImportCompletion,
+  getImportCompletionChartData,
   getOperationalActivationScore,
   getPilotCommandData,
   getPilotDecisionReadiness,
+  getPilotProgressChartData,
   getPilotReadinessScore,
   getPilotRisks,
   getPilotTimeline,
   getPilotValueCreated,
+  getRiskBreakdownChartData,
   getRoleBasedActionPlan,
   getSevenDayReviewPack,
+  getValueCreatedChartData,
   getValueConfidenceScore,
   type PilotPhaseStatus,
   type PilotRiskSeverity,
@@ -64,6 +69,10 @@ export default async function PilotCommandPage() {
   const rolePlan = getRoleBasedActionPlan();
   const reviewPack = getSevenDayReviewPack(data);
   const decision = getPilotDecisionReadiness(data);
+  const progressChart = getPilotProgressChartData(data);
+  const importChart = getImportCompletionChartData(data);
+  const valueChart = getValueCreatedChartData(data);
+  const riskChart = getRiskBreakdownChartData(data);
 
   return (
     <div className="space-y-6">
@@ -106,6 +115,24 @@ export default async function PilotCommandPage() {
         <Kpi title="Orders needing action" value={String(command.kpis.ordersNeedingAction)} icon={<LineChart className="h-5 w-5" />} tone={command.kpis.ordersNeedingAction > 0 ? "amber" : "white"} />
         <Kpi title="Stock risks" value={String(command.kpis.stockRisks)} icon={<AlertTriangle className="h-5 w-5" />} tone={command.kpis.stockRisks > 0 ? "rose" : "white"} />
         <Kpi title="Branches needing attention" value={String(command.kpis.branchesNeedingAttention)} icon={<Flag className="h-5 w-5" />} tone={command.kpis.branchesNeedingAttention > 0 ? "amber" : "white"} />
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <Panel title="Pilot Progress Chart" eyebrow="30-day motion" icon={<LineChart className="h-5 w-5" />}>
+          <ProgressTimelineChart data={progressChart} />
+        </Panel>
+        <Panel title="Import Completion Chart" eyebrow="Data readiness" icon={<FileSpreadsheet className="h-5 w-5" />}>
+          <HorizontalBarChart data={importChart} tone="clinical" />
+        </Panel>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-2">
+        <Panel title="Value Created Chart" eyebrow="Pilot proof" icon={<BarChart3 className="h-5 w-5" />}>
+          <HorizontalBarChart data={valueChart} valueType="currency" tone="emerald" />
+        </Panel>
+        <Panel title="Risk Breakdown Chart" eyebrow="Management pressure" icon={<AlertTriangle className="h-5 w-5" />}>
+          <HorizontalBarChart data={riskChart} tone="rose" />
+        </Panel>
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">

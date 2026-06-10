@@ -332,3 +332,58 @@ export function getPilotCommandAiSummary(data: PilotCommandData) {
 
   return "Pilot setup is stable. Use the next review cycle to prove repeatable branch discipline, chronic retention, and executive reporting value.";
 }
+
+export function getPilotProgressChartData(data: PilotCommandData) {
+  const day = getCurrentPilotDay(data);
+  const phases = [
+    { label: "Setup and Import", start: 1, end: 3 },
+    { label: "Staff Training", start: 4, end: 7 },
+    { label: "Chronic Follow-Up Sprint", start: 8, end: 14 },
+    { label: "Order Recovery Sprint", start: 15, end: 21 },
+    { label: "Stock and Branch Review", start: 22, end: 26 },
+    { label: "Executive Review", start: 27, end: 30 }
+  ];
+
+  return phases.map((phase) => {
+    const total = phase.end - phase.start + 1;
+    const completeDays = Math.max(0, Math.min(day, phase.end) - phase.start + 1);
+    return {
+      label: phase.label,
+      value: clamp((completeDays / total) * 100),
+      detail: `Days ${phase.start}-${phase.end}`
+    };
+  });
+}
+
+export function getImportCompletionChartData(data: PilotCommandData) {
+  return [
+    { label: "Branches", value: importedCount(data, "branches", data.branches.length) },
+    { label: "Staff", value: importedCount(data, "staff-members", data.staff.length) },
+    { label: "Chronic Patients", value: importedCount(data, "chronic-patients", data.patients.length) },
+    { label: "Stock", value: importedCount(data, "stock-items", data.stockItems.length) },
+    { label: "Orders", value: importedCount(data, "orders", data.orders.length) },
+    { label: "Follow-Up Tasks", value: importedCount(data, "follow-up-tasks", data.followUps.length) },
+    { label: "Import Batches", value: data.importBatches.length }
+  ];
+}
+
+export function getValueCreatedChartData(data: PilotCommandData) {
+  const values = getPilotValueCreated(data);
+  return [
+    { label: "Chronic revenue protected", value: values[0]?.value ?? 0, detail: "USD estimate" },
+    { label: "Awaiting payment value", value: values[1]?.value ?? 0, detail: "USD identified" },
+    { label: "Stock risk value", value: values[2]?.value ?? 0, detail: "USD exposure" },
+    { label: "Follow-up workload activated", value: values[3]?.value ?? 0, detail: "Tasks" },
+    { label: "Branch bottlenecks identified", value: values[4]?.value ?? 0, detail: "Branches" }
+  ];
+}
+
+export function getRiskBreakdownChartData(data: PilotCommandData) {
+  return [
+    { label: "Overdue follow-ups", value: data.followUps.filter((task) => task.status === FollowUpStatus.PENDING && task.dueDate < today()).length },
+    { label: "Awaiting payment", value: data.orders.filter((order) => order.status === OrderStatus.AWAITING_PAYMENT).length },
+    { label: "Stock alerts", value: data.stockItems.filter((item) => item.status !== StockStatus.HEALTHY).length },
+    { label: "Dirty import data", value: data.importBatches.filter((batch) => batch.issueCount > 0 || (batch.failedRecordCount ?? 0) > 0).length },
+    { label: "Branches needing attention", value: data.branches.filter((branch) => branch.staffResponseScore < 82 || branch.stockItems.some((item) => item.status !== StockStatus.HEALTHY)).length }
+  ];
+}

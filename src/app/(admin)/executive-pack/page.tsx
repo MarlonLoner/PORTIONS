@@ -1,17 +1,22 @@
 import { AlertTriangle, BarChart3, Building2, ClipboardCheck, FileSpreadsheet, LineChart, PackageSearch, ShieldCheck, UsersRound } from "lucide-react";
 import type { ReactNode } from "react";
 import { ExecutivePackActions } from "@/components/executive-pack-actions";
+import { HorizontalBarChart, SnapshotGrid } from "@/components/simple-charts";
 import {
+  getBranchPerformanceChartData,
   getBranchPerformanceSummary,
   getChronicRetentionSummary,
   getExecutivePackData,
   getExecutiveSummary,
+  getExecutiveValueSnapshotData,
   getImportedDataSummary,
+  getOrderPipelineChartData,
   getPilotRiskSummary,
   getPrintMetadata,
   getRevenueControlSummary,
   getRolloutRecommendation,
   getStaffExecutionSummary,
+  getStockRiskChartData,
   getStockRiskSummary,
   getValueCreatedSummary
 } from "@/lib/executive-pack";
@@ -32,6 +37,10 @@ export default async function ExecutivePackPage() {
   const value = getValueCreatedSummary(data);
   const risks = getPilotRiskSummary(data);
   const rollout = getRolloutRecommendation(data);
+  const executiveValueChart = getExecutiveValueSnapshotData(data);
+  const branchChart = getBranchPerformanceChartData(data);
+  const orderPipelineChart = getOrderPipelineChartData(data);
+  const stockRiskChart = getStockRiskChartData(data);
 
   return (
     <div className="executive-pack space-y-6">
@@ -98,6 +107,22 @@ export default async function ExecutivePackPage() {
           <Metric label="Approved/imported" value={String(imported.approvedImportedBatches)} />
         </MetricGrid>
       </ReportSection>
+
+      <ReportSection title="Executive Value Snapshot" eyebrow="Visual evidence" icon={<BarChart3 className="h-5 w-5" />}>
+        <SnapshotGrid data={executiveValueChart} valueType="currency" />
+      </ReportSection>
+
+      <div className="grid gap-6 xl:grid-cols-3">
+        <ReportSection title="Branch Performance Snapshot" eyebrow="Branch comparison" icon={<Building2 className="h-5 w-5" />}>
+          <HorizontalBarChart data={branchChart} valueType="currency" tone="navy" />
+        </ReportSection>
+        <ReportSection title="Order Pipeline Snapshot" eyebrow="Order health" icon={<LineChart className="h-5 w-5" />}>
+          <HorizontalBarChart data={orderPipelineChart} tone="clinical" />
+        </ReportSection>
+        <ReportSection title="Stock Risk Snapshot" eyebrow="Inventory health" icon={<PackageSearch className="h-5 w-5" />}>
+          <HorizontalBarChart data={stockRiskChart} tone="amber" />
+        </ReportSection>
+      </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
         <ReportSection title="Revenue & Order Control" eyebrow="Cash capture" icon={<LineChart className="h-5 w-5" />}>
