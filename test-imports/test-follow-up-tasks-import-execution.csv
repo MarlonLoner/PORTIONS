@@ -1,0 +1,8 @@
+customer_name,phone_number,task_type,branch,due_date,status,assigned_staff,suggested_action,priority,notes
+Tariro Moyo,+263771111111,Refill Reminder,Avondale,2026-06-15,Pending,,Call patient and confirm refill collection or delivery,High,Valid refill reminder task
+Blessing Ncube,+263772222222,Payment Pending,CBD,2026-06-16,Pending,,Send payment reminder for pending order,Medium,Valid payment follow-up task
+Rudo Chari,+263773333333,Delivery Confirmation,Eastlea,2026-06-17,Pending,,Confirm delivery was received,Low,Valid delivery confirmation task
+Unknown Patient,+263779999999,Lost Patient Revival,Borrowdale,2026-06-18,Pending,,Send revival message and offer refill support,High,Should import as unlinked task with warning if unlinked tasks are supported
+Invalid Date Customer,+263774444444,Refill Reminder,Avondale,not-a-date,Pending,,Should fail invalid due date,High,Should fail due to invalid date
+Unknown Branch Customer,+263775555555,Payment Pending,Unknown Branch,2026-06-19,Pending,,Should fail unknown branch,Medium,Should fail branch lookup
+Invalid Type Customer,+263776666666,Random Weird Task,CBD,2026-06-20,Strange Status,,Should default task type/status safely,Medium,Should import with warnings if branch and date are valid
