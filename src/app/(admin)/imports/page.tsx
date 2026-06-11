@@ -75,7 +75,7 @@ export default function ImportsPage() {
       </section>
 
       <section className="space-y-4">
-        <SectionHeader eyebrow="Template cards" title="Implementation-Ready Import Templates" helper="Each template includes required fields, optional fields, source guidance, CSV headers, and a sample row." />
+        <SectionHeader eyebrow="Template cards" title="Implementation-Ready Import Templates" helper="Each template includes required fields, optional fields, source guidance, CSV headers, and an example row for pilot preparation." />
         <div className="grid gap-5 xl:grid-cols-2">
           {templates.map((template) => {
             const headers = getTemplateCsvHeader(template);
