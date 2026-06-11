@@ -101,10 +101,10 @@ export function getRevenueDiagnosis(data: BriefData) {
   const highValueOrders = data.orders.filter((order) => Number(order.amount) >= 100 && order.status !== OrderStatus.DELIVERED && order.status !== OrderStatus.CANCELLED);
   const explanation =
     awaitingPayment.length > 0
-      ? `${formatCurrency(awaitingPaymentValue)} is stuck in quote or awaiting-payment stages. Payment reminders are the fastest revenue unlock today.`
+      ? `${formatCurrency(awaitingPaymentValue)} is stuck in quote or awaiting-payment stages. Send payment reminders before midday and assign one owner to close the queue.`
       : delayedOrders.length > 0
-        ? `${delayedOrders.length} orders are delayed in early pipeline stages. Assign owners before they become abandoned sales.`
-        : `Online revenue is ${formatCurrency(onlineRevenue)} and there is no major payment queue pressure. Keep fulfillment moving.`;
+        ? `${delayedOrders.length} orders are delayed in early pipeline stages. Prioritize pharmacist review and customer updates before these become abandoned sales.`
+        : `Online revenue is ${formatCurrency(onlineRevenue)} and the payment queue is controlled. Keep paid orders moving into packing and dispatch.`;
 
   return {
     onlineRevenue,
@@ -123,8 +123,8 @@ export function getChronicRiskSummary(data: BriefData) {
   const valueAtRisk = overdue.reduce((sum, patient) => sum + estimateMonthlyPatientValue(patient), 0);
   const explanation =
     overdue.length > 0
-      ? `${overdue.length} chronic patients are overdue, representing about ${formatCurrency(valueAtRisk)} in recurring monthly value. Recover these before refill behavior decays.`
-      : `${dueToday.length} patients are due today. Convert refill reminders into confirmed collection or delivery.`;
+      ? `${overdue.length} chronic patients are overdue, representing about ${formatCurrency(valueAtRisk)} in recurring monthly value. Contact them today with collection or delivery options before they drift to another pharmacy.`
+      : `${dueToday.length} patients are due today. Convert refill reminders into confirmed collection, delivery, or pharmacist review.`;
 
   return {
     dueToday,
@@ -162,10 +162,10 @@ export function getStockIntelligenceSummary(data: BriefData) {
   const suggestedTransfers = getSuggestedTransfers(data.stockItems);
   const explanation =
     chronicDemandRisk.length > 0
-      ? `${chronicDemandRisk.length} stock risks are tied to upcoming chronic demand. Resolve these before refill queues hit the branch.`
+      ? `${chronicDemandRisk.length} stock risks are tied to upcoming chronic demand. Move or reorder these items before refill queues hit the branch.`
       : nearExpiry.length > 0
-        ? `${formatCurrency(nearExpiryValue)} is under near-expiry pressure. Use controlled sell-through or transfers.`
-        : "Stock pressure is controlled. Keep reorder cadence and transfer review in the branch huddle.";
+        ? `${formatCurrency(nearExpiryValue)} is under near-expiry pressure. Use controlled sell-through, branch transfer, or category promotion before value is lost.`
+        : "Stock pressure is controlled. Keep reorder cadence and transfer review inside the branch huddle.";
 
   return {
     lowStock,
@@ -226,7 +226,7 @@ export function getCeoMorningBrief(data: BriefData) {
 
   return {
     health,
-    summary: `The network is ${health.toLowerCase()} today, with ${formatCurrency(revenue.onlineRevenue)} in online revenue and ${formatCurrency(revenue.awaitingPaymentValue)} exposed in quoted or awaiting-payment orders. ${best} is leading revenue, while ${attention} needs attention due to branch pressure. Chronic risk includes ${chronic.overdue.length} overdue refill patients, and stock pressure includes ${stock.lowStock.length} low-stock items.`,
+    summary: `The network is ${health.toLowerCase()} today. ${formatCurrency(revenue.onlineRevenue)} is moving through online channels, while ${formatCurrency(revenue.awaitingPaymentValue)} is still exposed in quote or awaiting-payment stages. ${best} is setting the pace, ${attention} needs manager attention, ${chronic.overdue.length} chronic refill patients require recovery, and ${stock.lowStock.length} low-stock items should be reviewed before they block patient care.`,
     priorities: getTopPriorities(data)
   };
 }

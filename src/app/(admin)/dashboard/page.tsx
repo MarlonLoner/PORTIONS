@@ -16,6 +16,7 @@ import {
   TrendingUp,
   UsersRound
 } from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { AiBriefCard } from "@/components/ai-brief-card";
 import { StatCard } from "@/components/stat-card";
@@ -52,8 +53,13 @@ export default async function DashboardPage() {
                 PORTIONS Pharmacy Command OS
               </h1>
               <p className="mt-4 max-w-3xl text-base leading-7 text-slate-200">
-                Executive control for revenue, chronic patient retention, online sales, pharmacy workflow, and branch risk across the group.
+                A command layer above daily pharmacy operations: protect chronic revenue, expose order and payment leakage, compare branches, and act on stock risk before manual updates arrive.
               </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <HeroLink href="/ai-brief" label="Open AI Brief" />
+                <HeroLink href="/pilot-command" label="Pilot Command" />
+                <HeroLink href="/executive-pack" label="Executive Pack" />
+              </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-3">
@@ -111,7 +117,7 @@ export default async function DashboardPage() {
         <AiBriefCard
           title="CEO Morning Brief"
           variant="executive"
-          action={`Decision rhythm: prioritize ${data.branchNeedingAttention}, protect ${data.bestBranch}, and clear clinical review before payment follow-up.`}
+          action={`Owner action: review ${data.branchNeedingAttention}, recover overdue refills, and clear pharmacist review before payment reminders.`}
         >
           <div className="grid gap-4 md:grid-cols-3">
             <BriefPoint
@@ -174,7 +180,9 @@ export default async function DashboardPage() {
                 </div>
               ))
             ) : (
-              <p className="text-sm text-slate-500">No branch revenue has been recorded yet.</p>
+              <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+                Import orders or connect branch sales data to see which location is carrying revenue and which one needs manager attention.
+              </p>
             )}
           </div>
         </SectionCard>
@@ -196,6 +204,15 @@ export default async function DashboardPage() {
         </SectionCard>
       </section>
     </div>
+  );
+}
+
+function HeroLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link href={href} className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2.5 text-sm font-semibold text-white ring-1 ring-white/15 transition hover:bg-white/15">
+      {label}
+      <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+    </Link>
   );
 }
 

@@ -122,7 +122,7 @@ export default function LandingPage() {
               <ShieldCheck className="h-6 w-6 text-emerald-200" aria-hidden="true" />
             </div>
             <div className="mt-6 grid gap-3">
-              {["Revenue pulse", "Patient risk", "Branch pressure", "Stock exposure", "Today’s actions"].map((item) => (
+              {["Revenue pulse", "Patient risk", "Branch pressure", "Stock exposure", "Today's actions"].map((item) => (
                 <div key={item} className="flex items-center gap-3 rounded-lg bg-white p-4 text-navy-950">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
                   <span className="text-sm font-semibold">{item}</span>
@@ -169,7 +169,7 @@ export default function LandingPage() {
             The owner opens PORTIONS and sees what happened, what is leaking, and what the team must do today.
           </h2>
           <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600">
-            Instead of asking every branch for updates, the owner sees chronic patients due, overdue follow-ups, quoted orders awaiting payment, stock alerts, branch pressure, and the AI Brief’s recommended priorities.
+            Instead of asking every branch for updates, the owner sees chronic patients due, overdue follow-ups, quoted orders awaiting payment, stock alerts, branch pressure, and the AI Brief's recommended priorities.
           </p>
         </div>
       </section>

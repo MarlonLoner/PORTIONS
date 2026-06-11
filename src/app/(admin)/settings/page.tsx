@@ -121,7 +121,7 @@ export default async function SettingsPage() {
         <StatCard title="Staff count" value={String(overview.staffCount)} helper="Seeded team members" icon={<UsersRound className="h-5 w-5" />} tone="blue" trend="Team" />
         <StatCard title="Active packages" value={String(overview.activePackageTypes)} helper="Chronic care package options" icon={<Pill className="h-5 w-5" />} tone="emerald" trend="Care" />
         <StatCard title="Notification channels" value={String(overview.notificationChannels)} helper="Manual and connected channels" icon={<Bell className="h-5 w-5" />} tone="white" trend="Comms" />
-        <StatCard title="Import readiness" value={`${overview.importReadinessScore}%`} helper="CSV and demo data preparedness" icon={<UploadCloud className="h-5 w-5" />} tone={overview.importReadinessScore >= 70 ? "emerald" : "amber"} trend="Imports" />
+        <StatCard title="Import readiness" value={`${overview.importReadinessScore}%`} helper="CSV and pilot data preparedness" icon={<UploadCloud className="h-5 w-5" />} tone={overview.importReadinessScore >= 70 ? "emerald" : "amber"} trend="Imports" />
         <StatCard title="Integration readiness" value={`${overview.integrationReadinessScore}%`} helper="Manual, mapped, and future channels" icon={<Database className="h-5 w-5" />} tone={overview.integrationReadinessScore >= 70 ? "emerald" : "amber"} trend="Systems" />
         <StatCard title="Checklist progress" value={`${checklist.filter((item) => item.done).length}/${checklist.length}`} helper="Deployment steps completed" icon={<ClipboardCheck className="h-5 w-5" />} tone="white" trend="Pilot" />
       </section>

@@ -75,7 +75,7 @@ export default async function AiBriefPage() {
           <div>
             <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-clinical-100 ring-1 ring-white/15">
               <Bot className="h-3.5 w-3.5" aria-hidden="true" />
-              Daily Intelligence Brain
+              Daily CEO Operator Brief
             </span>
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <h1 className="text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">AI Brief</h1>
@@ -84,7 +84,7 @@ export default async function AiBriefPage() {
               </span>
             </div>
             <p className="mt-4 max-w-3xl text-base leading-7 text-slate-200">
-              Daily pharmacy intelligence across revenue, patients, orders, stock, branches, and staff action.
+              A daily command brief showing what money is stuck, which patients are at risk, where branches need coaching, and what staff must clear today.
             </p>
             <p className="mt-5 max-w-4xl text-sm leading-7 text-slate-100">{ceo.summary}</p>
           </div>
@@ -92,7 +92,7 @@ export default async function AiBriefPage() {
           <div className="rounded-lg border border-white/10 bg-white/10 p-4">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-emerald-200" aria-hidden="true" />
-              <h2 className="text-lg font-semibold">Today's Top 3 Priorities</h2>
+              <h2 className="text-lg font-semibold">Owner Priorities Today</h2>
             </div>
             <div className="mt-4 space-y-3">
               {priorities.map((priority, index) => (

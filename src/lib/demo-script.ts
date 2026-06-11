@@ -4,8 +4,8 @@ export function getDemoScriptSteps() {
       title: "The Owner's Morning Problem",
       href: "/",
       pageLabel: "Public landing",
-      say: "Open with the reality that owners wake up needing to know what happened across branches before calling managers or waiting for manual reports.",
-      pointAt: "The PORTIONS promise: chronic revenue, branches, orders, stock, and execution in one command system.",
+      say: "Open with the owner reality: before the first call, they need to know what revenue is moving, what is leaking, and which branch needs attention.",
+      pointAt: "PORTIONS as the Pharmacy Command OS, not another POS screen.",
       buyerQuestion: "Why does this matter to an owner or executive?",
       transition: "Once the problem is clear, show why convenience failure quietly costs money."
     },
@@ -13,7 +13,7 @@ export function getDemoScriptSteps() {
       title: "The Cost Of Convenience Failure",
       href: "/demo",
       pageLabel: "Demo story",
-      say: "Explain that chronic patients forget refills, online orders get stuck, branches work in silos, and stock risk appears late.",
+      say: "Explain that the loss is usually quiet: missed refill reminders, unpaid quotes, slow reviews, branch silos, and stockouts where demand exists.",
       pointAt: "The pain and value pillars on the demo walkthrough.",
       buyerQuestion: "What operational leakage does PORTIONS solve?",
       transition: "Now move from the story into the live command view."
@@ -22,7 +22,7 @@ export function getDemoScriptSteps() {
       title: "Dashboard Command View",
       href: "/dashboard",
       pageLabel: "Dashboard",
-      say: "Position the dashboard as the owner's first 60-second read of the pharmacy network.",
+      say: "Position the dashboard as the owner's first 60-second read: where money is moving, where patients are at risk, and which queues need action.",
       pointAt: "Revenue, orders, chronic due, overdue patients, best branch, weak branch, and CEO Morning Brief.",
       buyerQuestion: "Can I understand the business without calling everyone?",
       transition: "The dashboard shows the numbers; the AI Brief explains what matters."
@@ -31,7 +31,7 @@ export function getDemoScriptSteps() {
       title: "AI Brief",
       href: "/ai-brief",
       pageLabel: "AI Brief",
-      say: "Frame this as the daily analyst that turns pharmacy noise into a prioritized action plan.",
+      say: "Frame this as the daily CEO/operator brief that tells the team what to clear today before revenue or patient trust slips.",
       pointAt: "CEO Morning Brief, revenue diagnosis, chronic risk, branch coach, and staff action plan.",
       buyerQuestion: "Can the system tell my team what to do next?",
       transition: "The strongest money feature is chronic revenue protection."
@@ -40,7 +40,7 @@ export function getDemoScriptSteps() {
       title: "Chronic Revenue Engine",
       href: "/patients",
       pageLabel: "Chronic Patients",
-      say: "Show chronic patients as recurring revenue, not a static patient list.",
+      say: "Show chronic patients as recurring revenue under management, not a static patient list.",
       pointAt: "Due today, overdue, high risk, VIP, revenue at risk, and refill opportunities.",
       buyerQuestion: "How does this protect repeat pharmacy revenue?",
       transition: "Once risk is visible, the team needs a recovery queue."
@@ -49,7 +49,7 @@ export function getDemoScriptSteps() {
       title: "Follow-Up Recovery",
       href: "/follow-ups",
       pageLabel: "Follow-Up Queue",
-      say: "Position this as the revenue recovery machine for support staff and pharmacists.",
+      say: "Position this as the daily recovery queue for support staff and pharmacists: who to contact, why, and what message to send.",
       pointAt: "Urgency groups, suggested action, WhatsApp message, and overdue/high-risk visual priority.",
       buyerQuestion: "How do staff know who to call first?",
       transition: "The same control logic applies to online and branch orders."
@@ -58,7 +58,7 @@ export function getDemoScriptSteps() {
       title: "Order Pipeline",
       href: "/orders",
       pageLabel: "Orders",
-      say: "Show how PORTIONS captures orders from quote to payment, packing, dispatch, and delivery.",
+      say: "Show how PORTIONS makes order leakage visible from pharmacist review to quote, payment, packing, dispatch, and delivery.",
       pointAt: "Awaiting review, awaiting payment, packed, dispatched, high-value and stuck orders.",
       buyerQuestion: "How do we stop online orders from leaking?",
       transition: "Next, show that every branch becomes a mini business unit."
@@ -85,7 +85,7 @@ export function getDemoScriptSteps() {
       title: "Import And Onboarding Workflow",
       href: "/imports",
       pageLabel: "Imports",
-      say: "Show that PORTIONS is deployable: templates, upload preview, validation, saved batches, approval, and safe execution.",
+      say: "Show that PORTIONS can start with real pharmacy data: templates, upload preview, validation, saved batches, approval, and safe execution.",
       pointAt: "Import templates, upload preview, batches, and onboarding steps.",
       buyerQuestion: "How hard is setup if our data is messy?",
       transition: "After setup, the pilot needs a control room."
@@ -94,7 +94,7 @@ export function getDemoScriptSteps() {
       title: "Pilot Command Center",
       href: "/pilot-command",
       pageLabel: "Pilot Command",
-      say: "Position this as the 30-day proof dashboard for rollout readiness and value creation.",
+      say: "Position this as the 30-day proof dashboard: what has been imported, what is active, what value is visible, and what still needs action.",
       pointAt: "Pilot status, day count, readiness, charts, timeline, risks, value created, and role actions.",
       buyerQuestion: "How do we know the pilot is working?",
       transition: "Executives need a shareable boardroom artifact."
@@ -103,7 +103,7 @@ export function getDemoScriptSteps() {
       title: "Executive Export Pack",
       href: "/executive-pack",
       pageLabel: "Executive Pack",
-      say: "Show the printable review pack that summarizes pilot evidence for owners and partners.",
+      say: "Show the printable review pack that turns pilot activity into a boardroom decision document.",
       pointAt: "Executive summary, imported data, revenue control, chronic retention, stock risk, charts, and rollout recommendation.",
       buyerQuestion: "Can this become a decision document?",
       transition: "Close by making the next step small, controlled, and measurable."
@@ -112,7 +112,7 @@ export function getDemoScriptSteps() {
       title: "Pilot Close",
       href: "/pilot",
       pageLabel: "Request Pilot",
-      say: "Recommend a 30-day pilot with clear data sources, branch scope, and success metrics.",
+      say: "Close with a controlled 30-day pilot: confirmed branches, import files, success metrics, staff rhythm, and a first review meeting.",
       pointAt: "Pilot request form and setup expectations.",
       buyerQuestion: "What exactly happens next?",
       transition: "Confirm branch count, data sources, success metrics, and the setup call."
@@ -124,7 +124,7 @@ export function getObjectionResponses() {
   return [
     {
       objection: "We already use ProPharm.",
-      response: "PORTIONS is not replacing your POS. It sits above operational data to show revenue risk, follow-up discipline, branch performance, and executive actions."
+      response: "PORTIONS is not replacing your POS. It sits above POS and operational data to show revenue risk, follow-up discipline, branch performance, and what managers should do next."
     },
     {
       objection: "Our data is messy.",
@@ -132,7 +132,7 @@ export function getObjectionResponses() {
     },
     {
       objection: "Staff may not use this.",
-      response: "The pilot focuses on daily queues: who to call, what order is stuck, what stock needs action, and what the branch manager must fix today."
+      response: "The pilot focuses on practical daily queues: who to call, which order is stuck, what stock needs action, and what the branch manager must clear today."
     },
     {
       objection: "How long does setup take?",
@@ -144,7 +144,7 @@ export function getObjectionResponses() {
     },
     {
       objection: "How do we know it will pay for itself?",
-      response: "The Executive Pack shows payment leakage, chronic revenue protected, stock risk flagged, branch bottlenecks, and workload activated so value can be reviewed before rollout."
+      response: "The Executive Pack shows payment leakage, chronic revenue protected, stock risk flagged, branch bottlenecks, and workload activated so value can be reviewed before any rollout decision."
     }
   ];
 }

@@ -63,7 +63,7 @@ export default function PilotPage() {
             </div>
             <h1 className="mt-6 text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">Request a PORTIONS Pilot</h1>
             <p className="mt-4 max-w-3xl text-base leading-7 text-slate-200">
-              Start with a 30-day pharmacy command pilot for chronic patients, online orders, branches, stock, and executive reporting.
+              Start with a controlled 30-day pharmacy command pilot: import the right data, activate daily queues, measure leakage, and review the first executive evidence pack.
             </p>
             <div className="mt-8 grid gap-3 sm:grid-cols-2">
               {["Executive visibility", "Chronic retention", "Order revenue capture", "Branch and stock discipline"].map((item) => (
@@ -83,7 +83,7 @@ export default function PilotPage() {
                 </div>
                 <h2 className="mt-6 text-2xl font-semibold tracking-tight">Pilot request received</h2>
                 <p className="mt-3 text-sm leading-7 text-slate-600">
-                  The PORTIONS team can now review your pharmacy profile, branch count, system context, and operating pain before contacting you.
+                  The PORTIONS team can now review your pharmacy profile, branch count, current system, and operating pain before mapping the right 30-day pilot.
                 </p>
                 <div className="mt-6 flex flex-wrap justify-center gap-3">
                   <Link href="/" className="focus-ring rounded-lg bg-navy-950 px-4 py-2.5 text-sm font-semibold text-white">
@@ -154,7 +154,7 @@ export default function PilotPage() {
       <section className="mx-auto grid max-w-7xl gap-5 px-4 py-10 sm:px-6 lg:grid-cols-3 lg:px-8">
         <PilotCard icon={<Building2 className="h-5 w-5" />} title="Built for multi-branch control" detail="Pilot around branch visibility, manager accountability, and network-level revenue signals." />
         <PilotCard icon={<Pill className="h-5 w-5" />} title="Chronic revenue first" detail="Start by importing chronic patients and turning refill follow-up into a measurable operating rhythm." />
-        <PilotCard icon={<ClipboardList className="h-5 w-5" />} title="Executive report by week one" detail="Show owners what happened, what leaked, and what the team must do next." />
+        <PilotCard icon={<ClipboardList className="h-5 w-5" />} title="Executive report by week one" detail="Show owners what was imported, what leaked, what was recovered, and what the team must do next." />
       </section>
     </main>
   );

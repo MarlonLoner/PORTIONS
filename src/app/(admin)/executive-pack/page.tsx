@@ -56,6 +56,8 @@ export default async function ExecutivePackPage() {
               .print-section { break-inside: avoid; page-break-inside: avoid; box-shadow: none !important; border-color: #d9e2ec !important; background: white !important; margin-bottom: 18px !important; }
               .print-hero { background: white !important; color: #0f172a !important; border: 1px solid #d9e2ec !important; box-shadow: none !important; }
               .print-hero * { color: #0f172a !important; }
+              .print-safe-dark { background: white !important; color: #0f172a !important; border: 1px solid #d9e2ec !important; box-shadow: none !important; }
+              .print-safe-dark * { color: #0f172a !important; }
             }
           `
         }}
@@ -206,7 +208,7 @@ export default async function ExecutivePackPage() {
       </ReportSection>
 
       <ReportSection title="Rollout Recommendation" eyebrow="Final decision" icon={<ShieldCheck className="h-5 w-5" />}>
-        <div className="rounded-lg bg-navy-950 p-5 text-white">
+        <div className="print-safe-dark rounded-lg bg-navy-950 p-5 text-white">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-100">Recommendation</p>
           <p className="mt-2 text-3xl font-semibold">{rollout.recommendation}</p>
           <p className="mt-3 text-sm leading-7 text-slate-200">{rollout.why}</p>
