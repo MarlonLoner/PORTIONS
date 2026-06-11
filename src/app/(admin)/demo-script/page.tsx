@@ -1,12 +1,13 @@
 import { ArrowRight, CheckCircle2, ClipboardCheck, HelpCircle, Presentation, Route, ShieldCheck, Target } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { getClosingFramework, getDemoChecklist, getDemoScriptSteps, getObjectionResponses } from "@/lib/demo-script";
+import { getClosingFramework, getDemoChecklist, getDemoOpeningScript, getDemoScriptSteps, getObjectionResponses } from "@/lib/demo-script";
 
 export const dynamic = "force-dynamic";
 
 export default function DemoScriptPage() {
   const steps = getDemoScriptSteps();
+  const opening = getDemoOpeningScript();
   const objections = getObjectionResponses();
   const checklist = getDemoChecklist();
   const close = getClosingFramework();
@@ -35,6 +36,30 @@ export default function DemoScriptPage() {
         </div>
       </section>
 
+      <section className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+        <Panel title={opening.title} eyebrow="Opening talk track" icon={<Presentation className="h-5 w-5" />}>
+          <p className="rounded-lg bg-navy-950 p-4 text-sm leading-7 text-white">{opening.say}</p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Link href={opening.href} className="focus-ring inline-flex items-center gap-2 rounded-lg bg-navy-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-navy-800">
+              Open Demo Script
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+            <p className="text-sm font-semibold leading-6 text-clinical-800">{opening.transition}</p>
+          </div>
+        </Panel>
+
+        <Panel title="Presenter Rhythm" eyebrow="15-minute flow" icon={<Target className="h-5 w-5" />}>
+          <div className="space-y-2">
+            {["Open with owner pain", "Show public story", "Move into command room", "Prove chronic, orders, branches, and stock", "Show pilot proof", "Close on a 30-day pilot"].map((item) => (
+              <p key={item} className="flex items-start gap-2 rounded-lg bg-clinical-50 p-3 text-sm font-semibold leading-6 text-clinical-900">
+                <CheckCircle2 className="mt-1 h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden="true" />
+                {item}
+              </p>
+            ))}
+          </div>
+        </Panel>
+      </section>
+
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
         <SectionHeader eyebrow="Talk track timeline" title="The Strongest Sequence" icon={<Route className="h-5 w-5" />} />
         <div className="mt-5 space-y-4">
@@ -42,13 +67,17 @@ export default function DemoScriptPage() {
             <article key={step.title} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-700">Step {index + 1}</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-700">Step {index + 1} · {step.duration}</p>
                   <h2 className="mt-1 text-xl font-semibold tracking-tight text-navy-950">{step.title}</h2>
                 </div>
-                <Link href={step.href} className="focus-ring inline-flex items-center gap-2 rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-navy-800">
-                  Open {step.pageLabel}
-                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-                </Link>
+                <div className="flex flex-wrap gap-2">
+                  <Link href={step.href} className="focus-ring inline-flex items-center gap-2 rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-navy-800">
+                    Open {step.pageLabel}
+                    <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  </Link>
+                  {step.secondaryHref ? <MiniRouteLink href={step.secondaryHref} label="Next page" /> : null}
+                  {step.tertiaryHref ? <MiniRouteLink href={step.tertiaryHref} label="Batch review" /> : null}
+                </div>
               </div>
               <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
                 <TalkBlock label="What to say" value={step.say} />
@@ -65,10 +94,14 @@ export default function DemoScriptPage() {
         <Panel title="Demo Navigation Cards" eyebrow="Route launcher" icon={<Presentation className="h-5 w-5" />}>
           <div className="grid gap-3 sm:grid-cols-2">
             {steps.map((step) => (
-              <Link key={step.href + step.title} href={step.href} className="focus-ring flex items-center justify-between gap-3 rounded-lg bg-slate-50 p-3 text-sm font-semibold text-navy-950 ring-1 ring-slate-200 transition hover:bg-clinical-50">
-                {step.pageLabel}
-                <ArrowRight className="h-4 w-4 text-clinical-700" aria-hidden="true" />
-              </Link>
+              <div key={step.href + step.title} className="space-y-2">
+                <Link href={step.href} className="focus-ring flex items-center justify-between gap-3 rounded-lg bg-slate-50 p-3 text-sm font-semibold text-navy-950 ring-1 ring-slate-200 transition hover:bg-clinical-50">
+                  {step.pageLabel}
+                  <ArrowRight className="h-4 w-4 text-clinical-700" aria-hidden="true" />
+                </Link>
+                {step.secondaryHref ? <MiniRouteLink href={step.secondaryHref} label={step.secondaryHref} /> : null}
+                {step.tertiaryHref ? <MiniRouteLink href={step.tertiaryHref} label={step.tertiaryHref} /> : null}
+              </div>
             ))}
           </div>
         </Panel>
@@ -145,6 +178,15 @@ function TalkBlock({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">{label}</p>
       <p className="mt-2 text-sm leading-6 text-slate-700">{value}</p>
     </div>
+  );
+}
+
+function MiniRouteLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link href={href} className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-semibold text-clinical-800 ring-1 ring-clinical-100 transition hover:bg-clinical-50">
+      {label}
+      <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+    </Link>
   );
 }
 

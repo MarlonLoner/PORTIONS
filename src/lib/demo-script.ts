@@ -1,121 +1,139 @@
-export function getDemoScriptSteps() {
+export type DemoScriptStep = {
+  title: string;
+  duration: string;
+  href: string;
+  secondaryHref?: string;
+  tertiaryHref?: string;
+  pageLabel: string;
+  say: string;
+  pointAt: string;
+  buyerQuestion: string;
+  transition: string;
+};
+
+export function getDemoOpeningScript() {
+  return {
+    title: "Opening: 60 seconds",
+    href: "/demo-script",
+    say: "Most pharmacies are not failing because they do not have stock or customers. They are leaking money because the owner cannot see everything clearly enough, early enough. Chronic patients miss refills. Orders sit unpaid. Branches operate differently. Stock risks are discovered late. Staff follow-ups are hard to track. PORTIONS is not trying to replace your POS. It is a Pharmacy Command OS that sits above the day-to-day chaos and gives the owner visibility over patients, orders, branches, stock, follow-ups, and pilot performance.",
+    transition: "Let me show you the system the way an owner would experience it."
+  };
+}
+
+export function getDemoScriptSteps(): DemoScriptStep[] {
   return [
     {
-      title: "The Owner's Morning Problem",
-      href: "/",
-      pageLabel: "Public landing",
-      say: "Open with the owner reality: before the first call, they need to know what revenue is moving, what is leaking, and which branch needs attention.",
-      pointAt: "PORTIONS as the Pharmacy Command OS, not another POS screen.",
-      buyerQuestion: "Why does this matter to an owner or executive?",
-      transition: "Once the problem is clear, show why convenience failure quietly costs money."
-    },
-    {
-      title: "The Cost Of Convenience Failure",
+      title: "Public Demo Story",
+      duration: "1 minute",
       href: "/demo",
-      pageLabel: "Demo story",
-      say: "Explain that the loss is usually quiet: missed refill reminders, unpaid quotes, slow reviews, branch silos, and stockouts where demand exists.",
-      pointAt: "The pain and value pillars on the demo walkthrough.",
-      buyerQuestion: "What operational leakage does PORTIONS solve?",
-      transition: "Now move from the story into the live command view."
+      pageLabel: "Demo",
+      say: "This is the story layer. It explains the problem PORTIONS solves before we enter the command system. The big promise is simple: help pharmacy owners move from scattered operations to controlled execution.",
+      pointAt: "Pharmacy Command OS positioning, chronic revenue, branch visibility, stock and order control, and 30-day pilot framing.",
+      buyerQuestion: "Why does this matter to an owner or executive?",
+      transition: "Now let's enter the actual command room."
     },
     {
-      title: "Dashboard Command View",
+      title: "Dashboard",
+      duration: "2 minutes",
       href: "/dashboard",
       pageLabel: "Dashboard",
-      say: "Position the dashboard as the owner's first 60-second read: where money is moving, where patients are at risk, and which queues need action.",
-      pointAt: "Revenue, orders, chronic due, overdue patients, best branch, weak branch, and CEO Morning Brief.",
-      buyerQuestion: "Can I understand the business without calling everyone?",
+      say: "This is the owner's daily command view. Instead of calling branches one by one or waiting for problems to reach them, the owner can see the health of the pharmacy network in one place. The dashboard gives quick visibility into chronic revenue, orders, branches, stock pressure, and the actions that need attention.",
+      pointAt: "KPI cards, CEO Morning Brief, and action links to AI Brief, Pilot Command, and Executive Pack.",
+      buyerQuestion: "What is happening in my pharmacy today?",
       transition: "The dashboard shows the numbers; the AI Brief explains what matters."
     },
     {
       title: "AI Brief",
+      duration: "2 minutes",
       href: "/ai-brief",
       pageLabel: "AI Brief",
-      say: "Frame this as the daily CEO/operator brief that tells the team what to clear today before revenue or patient trust slips.",
-      pointAt: "CEO Morning Brief, revenue diagnosis, chronic risk, branch coach, and staff action plan.",
-      buyerQuestion: "Can the system tell my team what to do next?",
-      transition: "The strongest money feature is chronic revenue protection."
+      say: "This is designed like a daily CEO/operator briefing. It does not just show data. It turns the data into operational priorities. The owner can quickly see where revenue is at risk, which follow-ups matter, what orders need attention, and what branch or stock issues should be acted on today.",
+      pointAt: "Owner-level recommendations, revenue risks, branch actions, stock warnings, and the daily action plan.",
+      buyerQuestion: "What should I focus on today?",
+      transition: "One of the biggest money leaks in pharmacy is chronic refill behavior, so let's go there."
     },
     {
       title: "Chronic Revenue Engine",
+      duration: "2 minutes",
       href: "/patients",
-      pageLabel: "Chronic Patients",
-      say: "Show chronic patients as recurring revenue under management, not a static patient list.",
-      pointAt: "Due today, overdue, high risk, VIP, revenue at risk, and refill opportunities.",
-      buyerQuestion: "How does this protect repeat pharmacy revenue?",
-      transition: "Once risk is visible, the team needs a recovery queue."
-    },
-    {
-      title: "Follow-Up Recovery",
-      href: "/follow-ups",
-      pageLabel: "Follow-Up Queue",
-      say: "Position this as the daily recovery queue for support staff and pharmacists: who to contact, why, and what message to send.",
-      pointAt: "Urgency groups, suggested action, WhatsApp message, and overdue/high-risk visual priority.",
-      buyerQuestion: "How do staff know who to call first?",
-      transition: "The same control logic applies to online and branch orders."
+      secondaryHref: "/follow-ups",
+      pageLabel: "Patients and Follow-Ups",
+      say: "Chronic patients are not just patients. They are recurring revenue relationships. PORTIONS helps the pharmacy see who is due, who is overdue, who is high risk, and who needs attention before the sale disappears. The follow-up queue turns chronic revenue risk into staff action instead of hoping someone remembers to call.",
+      pointAt: "Patient KPIs, risk labels, refill timing, patient detail links, urgency groups, suggested actions, and WhatsApp-ready follow-up messages.",
+      buyerQuestion: "How do we protect repeat revenue?",
+      transition: "Now let's look at orders, because convenience only creates money when payment and fulfillment are controlled."
     },
     {
       title: "Order Pipeline",
+      duration: "1.5 minutes",
       href: "/orders",
       pageLabel: "Orders",
-      say: "Show how PORTIONS makes order leakage visible from pharmacist review to quote, payment, packing, dispatch, and delivery.",
-      pointAt: "Awaiting review, awaiting payment, packed, dispatched, high-value and stuck orders.",
-      buyerQuestion: "How do we stop online orders from leaking?",
-      transition: "Next, show that every branch becomes a mini business unit."
+      say: "Here we track the order pipeline. WhatsApp orders, website orders, prescription orders, paid orders, packed orders, and anything awaiting payment. The owner can see where money is stuck and where execution is slowing down.",
+      pointAt: "Order statuses, awaiting payment, order value, and order details if useful.",
+      buyerQuestion: "Where is order revenue getting stuck?",
+      transition: "If one branch performs well and another is leaking, the owner needs to see it without guessing."
     },
     {
       title: "Branch Command",
+      duration: "1.5 minutes",
       href: "/branches",
       pageLabel: "Branches",
-      say: "Explain that each branch gets measured on revenue, patients, orders, stock, and response discipline.",
-      pointAt: "Branch health, revenue leakage, patient load, stock pressure, and suggested manager actions.",
-      buyerQuestion: "Can I see which branch is winning and which branch needs help?",
-      transition: "Branch performance depends heavily on stock availability."
+      say: "This is branch visibility. PORTIONS helps compare branch pressure, revenue activity, patient workload, order activity, and operational attention. For multi-branch pharmacies, this is where the owner stops managing by stories and starts managing by signals.",
+      pointAt: "Branch cards, the branch needing attention, and the branch detail page if useful.",
+      buyerQuestion: "Which branch needs my attention?",
+      transition: "Now the other major risk: stock."
     },
     {
       title: "Stock Intelligence",
+      duration: "1.5 minutes",
       href: "/stock",
       pageLabel: "Stock",
-      say: "Make stock feel like patient care and revenue risk, not just inventory.",
-      pointAt: "Low stock, near expiry, chronic demand risk, suggested transfers, and reorder urgency.",
-      buyerQuestion: "Can PORTIONS prevent stockouts before they cost revenue?",
-      transition: "Then show how a real pilot gets data into the system safely."
+      say: "Stock problems are expensive because they hurt both cash and customer trust. PORTIONS highlights low stock, near expiry risk, overstock pressure, and items that need action. The goal is not just stock visibility. It is protecting revenue before the customer is disappointed.",
+      pointAt: "Low stock, near expiry, overstock, and suggested actions.",
+      buyerQuestion: "What stock risks can hurt sales or cash flow?",
+      transition: "A good system is only useful if setup is practical, so let's look at onboarding."
     },
     {
       title: "Import And Onboarding Workflow",
+      duration: "2 minutes",
       href: "/imports",
+      secondaryHref: "/imports/upload",
+      tertiaryHref: "/imports/batches",
       pageLabel: "Imports",
-      say: "Show that PORTIONS can start with real pharmacy data: templates, upload preview, validation, saved batches, approval, and safe execution.",
-      pointAt: "Import templates, upload preview, batches, and onboarding steps.",
+      say: "PORTIONS is built for pilot onboarding. We can prepare templates for branches, staff, chronic patients, stock, orders, and follow-up tasks. The upload preview checks the data before it enters the system. Bad rows do not poison the whole batch. The system can validate, review, approve, and then import safely.",
+      pointAt: "Import templates, upload preview, saved batches, approval status, and imported batch review.",
       buyerQuestion: "How hard is setup if our data is messy?",
-      transition: "After setup, the pilot needs a control room."
+      transition: "Once the data is in, the pilot needs to prove value. That's where the Pilot Command Center comes in."
     },
     {
       title: "Pilot Command Center",
+      duration: "1.5 minutes",
       href: "/pilot-command",
       pageLabel: "Pilot Command",
-      say: "Position this as the 30-day proof dashboard: what has been imported, what is active, what value is visible, and what still needs action.",
-      pointAt: "Pilot status, day count, readiness, charts, timeline, risks, value created, and role actions.",
+      say: "This is the 30-day pilot control room. It tracks setup progress, data imported, operational activation, risks discovered, value confidence, and the next actions. This is how we avoid a vague pilot. We make the pilot measurable.",
+      pointAt: "30-day timeline, pilot KPIs, value created, risk breakdown, and role-based actions.",
       buyerQuestion: "How do we know the pilot is working?",
       transition: "Executives need a shareable boardroom artifact."
     },
     {
       title: "Executive Export Pack",
+      duration: "1.5 minutes",
       href: "/executive-pack",
       pageLabel: "Executive Pack",
-      say: "Show the printable review pack that turns pilot activity into a boardroom decision document.",
-      pointAt: "Executive summary, imported data, revenue control, chronic retention, stock risk, charts, and rollout recommendation.",
-      buyerQuestion: "Can this become a decision document?",
-      transition: "Close by making the next step small, controlled, and measurable."
+      say: "This is the boardroom-ready pilot review. It packages the key evidence: imported data, chronic retention, orders, branch performance, stock risks, staff execution, value created, and rollout recommendation. It can be printed or saved as a PDF.",
+      pointAt: "Executive summary, charts, rollout recommendation, and the Print / Save as PDF button.",
+      buyerQuestion: "What proof do we have before making a rollout decision?",
+      transition: "And at the end of the pilot, the owner needs something they can review or share."
     },
     {
       title: "Pilot Close",
+      duration: "90 seconds",
       href: "/pilot",
       pageLabel: "Request Pilot",
-      say: "Close with a controlled 30-day pilot: confirmed branches, import files, success metrics, staff rhythm, and a first review meeting.",
+      say: "The recommended next step is not a big risky rollout. It is a focused 30-day pilot. We import the pharmacy's operating data, activate the command views, agree success metrics, run the pilot, and review the evidence after 7 days and 30 days. The goal is simple: prove where PORTIONS protects revenue, improves follow-up discipline, exposes order leakage, shows stock risks, and gives the owner better control.",
       pointAt: "Pilot request form and setup expectations.",
       buyerQuestion: "What exactly happens next?",
-      transition: "Confirm branch count, data sources, success metrics, and the setup call."
+      transition: "Would it make sense to start with one or two branches for 30 days, then review the Executive Pack before deciding on wider rollout?"
     }
   ];
 }
@@ -170,11 +188,11 @@ export function getDemoChecklist() {
 
 export function getClosingFramework() {
   return [
-    "Recommend a 30-day pilot",
-    "Confirm branch count",
-    "Confirm data sources",
-    "Agree success metrics",
-    "Schedule setup call",
-    "Request pilot decision"
+    "Recommend a focused 30-day pilot, not a risky full rollout",
+    "Confirm one or two starting branches",
+    "Confirm operating data sources for import",
+    "Agree success metrics for chronic revenue, orders, stock, and follow-ups",
+    "Schedule setup call and first 7-day evidence review",
+    "Close on the question: start small, review the Executive Pack, then decide on rollout"
   ];
 }
