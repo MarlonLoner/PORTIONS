@@ -573,3 +573,31 @@ export async function getImportBatchById(id: string) {
     where: { id }
   });
 }
+
+export async function getOperationalActionsData() {
+  const [actions, branches, staff] = await Promise.all([
+    prisma.operationalAction.findMany({
+      include: {
+        branch: true,
+        assignedStaff: true,
+        activities: { orderBy: { createdAt: "desc" } }
+      },
+      orderBy: [{ status: "asc" }, { priority: "desc" }, { dueDate: "asc" }]
+    }),
+    prisma.branch.findMany({ orderBy: { name: "asc" } }),
+    prisma.staffMember.findMany({ include: { branch: true }, orderBy: { name: "asc" } })
+  ]);
+
+  return { actions, branches, staff };
+}
+
+export async function getOperationalActionById(id: string) {
+  return prisma.operationalAction.findUnique({
+    where: { id },
+    include: {
+      branch: true,
+      assignedStaff: true,
+      activities: { orderBy: { createdAt: "desc" } }
+    }
+  });
+}

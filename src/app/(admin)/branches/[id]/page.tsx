@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   Boxes,
   Building2,
   CreditCard,
@@ -76,6 +77,12 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ i
             <p className="mt-3 max-w-3xl text-base leading-7 text-slate-200">
               Full command profile for revenue, order flow, chronic care, staff rhythm, and stock pressure.
             </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link href="/action-center" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-navy-950 transition hover:bg-clinical-50">
+                Create Branch Issue Action
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-3 xl:w-[540px]">
             <HeroMetric label="Revenue today" value={formatCurrency(metrics.revenueToday)} />

@@ -27,6 +27,7 @@ const navItems = [
   { href: "/demo-script", label: "Script", icon: Presentation },
   { href: "/patients", label: "Patients", icon: UsersRound },
   { href: "/follow-ups", label: "Follow-Ups", icon: ClipboardList },
+  { href: "/action-center", label: "Actions", icon: ClipboardCheck },
   { href: "/orders", label: "Orders", icon: ShoppingBag },
   { href: "/branches", label: "Branches", icon: Building2 },
   { href: "/stock", label: "Stock", icon: PackageSearch },

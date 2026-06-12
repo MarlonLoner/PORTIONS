@@ -13,6 +13,7 @@ import {
   Target,
   UsersRound
 } from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { HorizontalBarChart, ProgressTimelineChart } from "@/components/simple-charts";
 import { getPilotCommandData as loadPilotCommandData } from "@/lib/data";
@@ -91,6 +92,14 @@ export default async function PilotCommandPage() {
             <div className="mt-5 flex flex-wrap gap-2">
               <Badge label={command.status} className={statusClasses[command.status]} />
               <Badge label={`Day ${command.currentDay} of 30`} className="bg-white text-navy-950 ring-white" />
+            </div>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link href="/action-center" className="focus-ring inline-flex items-center rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-navy-950 transition hover:bg-clinical-50">
+                Open Action Center
+              </Link>
+              <Link href="/action-center" className="focus-ring inline-flex items-center rounded-lg bg-white/10 px-4 py-2.5 text-sm font-semibold text-white ring-1 ring-white/15 transition hover:bg-white/15">
+                Create Pilot Task
+              </Link>
             </div>
             <p className="mt-5 rounded-lg bg-white/10 p-4 text-sm font-medium leading-7 text-slate-100 ring-1 ring-white/15">{command.suggestedNextAction}</p>
           </div>

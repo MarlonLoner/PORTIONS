@@ -1,6 +1,10 @@
 import {
   FollowUpStatus,
   FollowUpType,
+  OperationalActionCategory,
+  OperationalActionOutcome,
+  OperationalActionPriority,
+  OperationalActionStatus,
   OrderSource,
   OrderStatus,
   OrderType,
@@ -167,6 +171,8 @@ const stockProducts = [
 ];
 
 async function main() {
+  await prisma.operationalActionActivity.deleteMany();
+  await prisma.operationalAction.deleteMany();
   await prisma.report.deleteMany();
   await prisma.stockItem.deleteMany();
   await prisma.orderItem.deleteMany();
@@ -428,6 +434,123 @@ async function main() {
       }
     ]
   });
+
+  const staffByName = await prisma.staffMember.findMany();
+  const staffMap = new Map(staffByName.map((staff) => [staff.name, staff]));
+  const actionSeeds = [
+    {
+      title: "Contact overdue hypertension patient",
+      description: "Recover an overdue refill patient and offer delivery or branch collection before marking as lost.",
+      category: OperationalActionCategory.CHRONIC_PATIENT,
+      priority: OperationalActionPriority.CRITICAL,
+      status: OperationalActionStatus.OPEN,
+      sourceType: "PATIENT",
+      branchName: "Avondale",
+      staffName: "Chipo Mlambo",
+      dueDate: addDays(0),
+      valueAmount: money(95)
+    },
+    {
+      title: "Recover awaiting payment order",
+      description: "Send payment reminder for a quoted online order and confirm payment before close of business.",
+      category: OperationalActionCategory.ORDER_RECOVERY,
+      priority: OperationalActionPriority.HIGH,
+      status: OperationalActionStatus.IN_PROGRESS,
+      sourceType: "ORDER",
+      branchName: "CBD",
+      staffName: "Tinashe Zhou",
+      dueDate: addDays(0),
+      valueAmount: money(145)
+    },
+    {
+      title: "Transfer low-stock chronic medicine",
+      description: "Move surplus stock to the branch with refill pressure before chronic patients arrive this week.",
+      category: OperationalActionCategory.STOCK_INTERVENTION,
+      priority: OperationalActionPriority.HIGH,
+      status: OperationalActionStatus.OPEN,
+      sourceType: "STOCK",
+      branchName: "Eastlea",
+      staffName: "Munashe Gumbo",
+      dueDate: addDays(1),
+      valueAmount: money(320)
+    },
+    {
+      title: "Review branch follow-up backlog",
+      description: "Branch manager must review overdue follow-ups and assign owner for each unresolved patient task.",
+      category: OperationalActionCategory.BRANCH_ISSUE,
+      priority: OperationalActionPriority.MEDIUM,
+      status: OperationalActionStatus.BLOCKED,
+      sourceType: "BRANCH",
+      branchName: "Chitungwiza",
+      staffName: "Chipo Mlambo",
+      dueDate: addDays(-1),
+      valueAmount: money(0)
+    },
+    {
+      title: "Complete 7-day pilot review",
+      description: "Prepare the first pilot review pack and confirm next 7-day priorities with the owner.",
+      category: OperationalActionCategory.PILOT_TASK,
+      priority: OperationalActionPriority.MEDIUM,
+      status: OperationalActionStatus.COMPLETED,
+      sourceType: "PILOT_COMMAND",
+      branchName: "Borrowdale",
+      staffName: "Rudo Mutasa",
+      dueDate: addDays(-2),
+      completedAt: addDays(-1),
+      outcomeType: OperationalActionOutcome.REVENUE_PROTECTED,
+      outcomeNotes: "Prepared review pack and confirmed chronic recovery as the next sprint.",
+      valueAmount: money(750)
+    }
+  ];
+
+  for (const action of actionSeeds) {
+    const branch = branches.get(action.branchName);
+    const staff = staffMap.get(action.staffName);
+    const created = await prisma.operationalAction.create({
+      data: {
+        title: action.title,
+        description: action.description,
+        category: action.category,
+        priority: action.priority,
+        status: action.status,
+        sourceType: action.sourceType,
+        branchId: branch?.id,
+        assignedStaffId: staff?.id,
+        dueDate: action.dueDate,
+        completedAt: action.completedAt,
+        outcomeType: action.outcomeType,
+        outcomeNotes: action.outcomeNotes,
+        valueAmount: action.valueAmount,
+        activities: {
+          create: [
+            {
+              activityType: "CREATED",
+              description: "Action created from seeded PORTIONS operating insight.",
+              actorName: "PORTIONS"
+            },
+            ...(action.status === OperationalActionStatus.COMPLETED
+              ? [{
+                  activityType: "COMPLETED",
+                  description: "Outcome recorded for demo accountability reporting.",
+                  actorName: action.staffName
+                }]
+              : [])
+          ]
+        }
+      }
+    });
+
+    if (created.status !== OperationalActionStatus.COMPLETED && staff) {
+      await prisma.operationalActionActivity.create({
+        data: {
+          actionId: created.id,
+          activityType: "ASSIGNED",
+          description: `Assigned to ${staff.name}.`,
+          actorName: "PORTIONS"
+        }
+      });
+    }
+  }
 
   console.log("PORTIONS demo database seeded.");
 }

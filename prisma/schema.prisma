@@ -104,6 +104,43 @@ enum ImportBatchStatus {
   IMPORTED
 }
 
+enum OperationalActionCategory {
+  CHRONIC_PATIENT
+  ORDER_RECOVERY
+  STOCK_INTERVENTION
+  BRANCH_ISSUE
+  PILOT_TASK
+  MANAGEMENT_DECISION
+  GENERAL
+}
+
+enum OperationalActionPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum OperationalActionStatus {
+  OPEN
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  CANCELLED
+}
+
+enum OperationalActionOutcome {
+  REVENUE_RECOVERED
+  REVENUE_PROTECTED
+  PATIENT_CONTACTED
+  ORDER_RESOLVED
+  STOCK_RESOLVED
+  BRANCH_ESCALATED
+  NO_RESPONSE
+  NO_VALUE
+  OTHER
+}
+
 model Branch {
   id                 String         @id @default(cuid())
   name               String         @unique
@@ -119,6 +156,7 @@ model Branch {
   followUpTasks      FollowUpTask[]
   orders             Order[]
   stockItems         StockItem[]
+  operationalActions OperationalAction[]
 }
 
 model StaffMember {
@@ -135,6 +173,7 @@ model StaffMember {
   followUpTasks FollowUpTask[]
   orders        Order[]
   refillEvents  RefillEvent[]
+  operationalActions OperationalAction[]
 }
 
 model Patient {
@@ -321,4 +360,45 @@ model ImportBatch {
   @@index([status, createdAt])
   @@index([templateType])
   @@index([validationStatus])
+}
+
+model OperationalAction {
+  id              String                     @id @default(cuid())
+  title           String
+  description     String
+  category        OperationalActionCategory
+  priority        OperationalActionPriority  @default(MEDIUM)
+  status          OperationalActionStatus    @default(OPEN)
+  sourceType      String
+  sourceId        String?
+  branchId        String?
+  branch          Branch?                    @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  assignedStaffId String?
+  assignedStaff   StaffMember?               @relation(fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  dueDate         DateTime?
+  completedAt     DateTime?
+  outcomeType     OperationalActionOutcome?
+  outcomeNotes    String?
+  valueAmount     Decimal                    @default(0) @db.Decimal(12, 2)
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+  activities      OperationalActionActivity[]
+
+  @@index([status, dueDate])
+  @@index([priority, status])
+  @@index([category])
+  @@index([branchId])
+  @@index([assignedStaffId])
+}
+
+model OperationalActionActivity {
+  id           String            @id @default(cuid())
+  actionId     String
+  action       OperationalAction @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  activityType String
+  description  String
+  actorName    String?
+  createdAt    DateTime          @default(now())
+
+  @@index([actionId, createdAt])
 }

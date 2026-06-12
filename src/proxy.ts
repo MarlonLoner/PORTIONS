@@ -4,6 +4,7 @@ import { DEMO_ACCESS_COOKIE, isValidDemoAccessToken } from "@/lib/demo-auth";
 const protectedPrefixes = [
   "/dashboard",
   "/demo-script",
+  "/action-center",
   "/ai-brief",
   "/patients",
   "/follow-ups",
@@ -47,6 +48,7 @@ export const config = {
   matcher: [
     "/dashboard/:path*",
     "/demo-script/:path*",
+    "/action-center/:path*",
     "/ai-brief/:path*",
     "/patients/:path*",
     "/follow-ups/:path*",

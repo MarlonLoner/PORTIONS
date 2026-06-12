@@ -80,6 +80,12 @@ export default async function PatientsPage({ searchParams }: { searchParams: Sea
             <p className="mt-4 max-w-3xl text-base leading-7 text-slate-200">
               Track recurring patients, refill risk, package value, and follow-up discipline across every branch.
             </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link href="/action-center" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-navy-950 transition hover:bg-clinical-50">
+                Create Chronic Patient Action
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
             <HeroSignal label="Revenue at risk" value={formatCurrency(riskValue)} helper={`${revenueAtRisk.length} patients need action`} tone="risk" />
