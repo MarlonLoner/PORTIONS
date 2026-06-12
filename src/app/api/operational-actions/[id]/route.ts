@@ -12,7 +12,9 @@ function cleanString(value: unknown) {
 }
 
 function cleanOptionalString(value: unknown) {
+  if (value === null || value === undefined) return null;
   const cleaned = cleanString(value);
+  if (cleaned.toLowerCase() === "none") return null;
   return cleaned || null;
 }
 
@@ -47,7 +49,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params;
 
   try {
-    const existing = await prisma.operationalAction.findUnique({ where: { id } });
+    const existing = await prisma.operationalAction.findUnique({
+      where: { id },
+      include: { assignedStaff: true }
+    });
     if (!existing) return NextResponse.json({ error: "Operational action was not found." }, { status: 404 });
 
     const body = await request.json();
@@ -56,41 +61,57 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     if ("assignedStaffId" in body) {
       const assignedStaffId = cleanOptionalString(body.assignedStaffId);
-      if (assignedStaffId) {
+      if (assignedStaffId === existing.assignedStaffId) {
+        // No assignment change; avoid duplicate audit entries.
+      } else if (assignedStaffId) {
         const staff = await prisma.staffMember.findUnique({ where: { id: assignedStaffId } });
         if (!staff) return NextResponse.json({ error: "Selected staff member was not found." }, { status: 400 });
         if (existing.branchId && staff.branchId && staff.branchId !== existing.branchId) {
           return NextResponse.json({ error: "Assigned staff member belongs to another branch." }, { status: 400 });
         }
         data.assignedStaff = { connect: { id: assignedStaffId } };
-        activities.push({ activityType: "ASSIGNMENT_CHANGED", description: `Assigned to ${staff.name}.`, actorName: "PORTIONS" });
+        const description = existing.assignedStaff
+          ? `Reassigned from ${existing.assignedStaff.name} to ${staff.name}.`
+          : `Assigned to ${staff.name}.`;
+        activities.push({ activityType: "ASSIGNMENT_CHANGED", description, actorName: "PORTIONS" });
       } else {
         data.assignedStaff = { disconnect: true };
-        activities.push({ activityType: "ASSIGNMENT_CHANGED", description: "Assignment cleared.", actorName: "PORTIONS" });
+        if (existing.assignedStaffId) {
+          activities.push({ activityType: "ASSIGNMENT_CHANGED", description: "Assignment cleared.", actorName: "PORTIONS" });
+        }
       }
     }
 
     if ("priority" in body) {
       if (!isPriority(body.priority)) return NextResponse.json({ error: "Invalid action priority." }, { status: 400 });
-      data.priority = body.priority;
-      activities.push({ activityType: "PRIORITY_CHANGED", description: `Priority changed to ${body.priority}.`, actorName: "PORTIONS" });
+      if (body.priority !== existing.priority) {
+        data.priority = body.priority;
+        activities.push({ activityType: "PRIORITY_CHANGED", description: `Priority changed to ${body.priority}.`, actorName: "PORTIONS" });
+      }
     }
 
     if ("dueDate" in body) {
       const dueDate = parseOptionalDate(body.dueDate);
       if (dueDate === undefined) return NextResponse.json({ error: "Due date is not valid." }, { status: 400 });
-      data.dueDate = dueDate;
-      activities.push({ activityType: "DUE_DATE_CHANGED", description: dueDate ? `Due date changed to ${dueDate.toISOString().slice(0, 10)}.` : "Due date cleared.", actorName: "PORTIONS" });
+      const existingDate = existing.dueDate?.toISOString().slice(0, 10) ?? "";
+      const nextDate = dueDate?.toISOString().slice(0, 10) ?? "";
+      if (existingDate !== nextDate) {
+        data.dueDate = dueDate;
+        activities.push({ activityType: "DUE_DATE_CHANGED", description: dueDate ? `Due date changed to ${dueDate.toISOString().slice(0, 10)}.` : "Due date cleared.", actorName: "PORTIONS" });
+      }
     }
 
     if ("status" in body) {
       if (!isStatus(body.status)) return NextResponse.json({ error: "Invalid action status." }, { status: 400 });
-      if (existing.status === OperationalActionStatus.COMPLETED && body.status === OperationalActionStatus.COMPLETED) {
+      if (existing.status !== body.status && existing.status === OperationalActionStatus.COMPLETED && body.status === OperationalActionStatus.COMPLETED) {
         return NextResponse.json({ error: "Completed actions cannot be completed twice." }, { status: 400 });
       }
 
-      data.status = body.status;
-      if (body.status === OperationalActionStatus.COMPLETED) {
+      if (existing.status !== body.status) {
+        data.status = body.status;
+        activities.push({ activityType: "STATUS_CHANGED", description: `Status changed to ${body.status}.`, actorName: "PORTIONS" });
+      }
+      if (existing.status !== OperationalActionStatus.COMPLETED && body.status === OperationalActionStatus.COMPLETED) {
         data.completedAt = body.completedAt ? parseOptionalDate(body.completedAt) ?? new Date() : new Date();
         if ("outcomeType" in body) {
           if (!isOutcome(body.outcomeType)) return NextResponse.json({ error: "Invalid outcome type." }, { status: 400 });
@@ -98,31 +119,40 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         }
         data.outcomeNotes = cleanOptionalString(body.outcomeNotes);
       }
-      activities.push({ activityType: "STATUS_CHANGED", description: `Status changed to ${body.status}.`, actorName: "PORTIONS" });
     }
 
     if ("outcomeType" in body && !("status" in body)) {
       if (body.outcomeType && !isOutcome(body.outcomeType)) return NextResponse.json({ error: "Invalid outcome type." }, { status: 400 });
-      data.outcomeType = body.outcomeType || null;
-      activities.push({ activityType: "OUTCOME_RECORDED", description: `Outcome recorded as ${body.outcomeType || "none"}.`, actorName: "PORTIONS" });
+      const nextOutcome = body.outcomeType || null;
+      if (nextOutcome !== existing.outcomeType) {
+        data.outcomeType = nextOutcome;
+        activities.push({ activityType: "OUTCOME_RECORDED", description: `Outcome recorded as ${body.outcomeType || "none"}.`, actorName: "PORTIONS" });
+      }
     }
 
     if ("outcomeNotes" in body && !("status" in body)) {
-      data.outcomeNotes = cleanOptionalString(body.outcomeNotes);
-      activities.push({ activityType: "OUTCOME_RECORDED", description: "Outcome notes updated.", actorName: "PORTIONS" });
+      const outcomeNotes = cleanOptionalString(body.outcomeNotes);
+      if (outcomeNotes !== existing.outcomeNotes) {
+        data.outcomeNotes = outcomeNotes;
+        activities.push({ activityType: "OUTCOME_RECORDED", description: "Outcome notes updated.", actorName: "PORTIONS" });
+      }
     }
 
     if ("valueAmount" in body) {
       const valueAmount = parseValueAmount(body.valueAmount);
       if (valueAmount === null) return NextResponse.json({ error: "Value amount must be a non-negative number." }, { status: 400 });
-      if (valueAmount !== undefined) {
+      if (valueAmount !== undefined && !valueAmount.equals(existing.valueAmount)) {
         data.valueAmount = valueAmount;
         activities.push({ activityType: "VALUE_RECORDED", description: `Value recorded as ${valueAmount.toFixed(2)}.`, actorName: "PORTIONS" });
       }
     }
 
     if (Object.keys(data).length === 0) {
-      return NextResponse.json({ error: "No updates were provided." }, { status: 400 });
+      const current = await prisma.operationalAction.findUnique({
+        where: { id },
+        include: { branch: true, assignedStaff: true, activities: { orderBy: { createdAt: "desc" } } }
+      });
+      return NextResponse.json(current);
     }
 
     const updated = await prisma.operationalAction.update({

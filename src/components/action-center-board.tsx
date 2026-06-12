@@ -2,7 +2,7 @@
 
 import { CheckCircle2, Loader2, Plus, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { enumLabel, formatCurrency, formatDate, dateInputValue } from "@/lib/format";
 
 export type ActionCenterRecord = {
@@ -110,7 +110,7 @@ export function ActionCenterBoard({
     setFeedback("Action created and added to the accountability queue.");
   }
 
-  async function updateAction(id: string, payload: Record<string, string>, message: string) {
+  async function updateAction(id: string, payload: Record<string, string | null>, message: string) {
     setBusyId(id);
     setError("");
     setFeedback("");
@@ -124,12 +124,13 @@ export function ActionCenterBoard({
     if (!response.ok) {
       const result = await response.json().catch(() => ({ error: "Action could not be updated." }));
       setError(result.error ?? "Action could not be updated.");
-      return;
+      return false;
     }
 
     const updated = await response.json();
     setActions((current) => current.map((action) => action.id === id ? toRecord(updated) : action));
     setFeedback(message);
+    return true;
   }
 
   const grouped = {
@@ -257,7 +258,7 @@ function CreateActionForm({ branches, staff, busy, onSubmit }: { branches: Actio
   );
 }
 
-function QueueSection({ title, eyebrow, actions, busyId, branches, staff, onUpdate }: { title: string; eyebrow: string; actions: ActionCenterRecord[]; busyId: string; branches: ActionOption[]; staff: ActionOption[]; onUpdate: (id: string, payload: Record<string, string>, message: string) => Promise<void> }) {
+function QueueSection({ title, eyebrow, actions, busyId, branches, staff, onUpdate }: { title: string; eyebrow: string; actions: ActionCenterRecord[]; busyId: string; branches: ActionOption[]; staff: ActionOption[]; onUpdate: (id: string, payload: Record<string, string | null>, message: string) => Promise<boolean> }) {
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -276,8 +277,9 @@ function QueueSection({ title, eyebrow, actions, busyId, branches, staff, onUpda
   );
 }
 
-function ActionCard({ action, busy, staff, onUpdate }: { action: ActionCenterRecord; busy: boolean; branches: ActionOption[]; staff: ActionOption[]; onUpdate: (id: string, payload: Record<string, string>, message: string) => Promise<void> }) {
+function ActionCard({ action, busy, staff, onUpdate }: { action: ActionCenterRecord; busy: boolean; branches: ActionOption[]; staff: ActionOption[]; onUpdate: (id: string, payload: Record<string, string | null>, message: string) => Promise<boolean> }) {
   const [completion, setCompletion] = useState({ outcomeType: action.outcomeType ?? "REVENUE_PROTECTED", outcomeNotes: action.outcomeNotes ?? "", valueAmount: String(action.valueAmount ?? 0) });
+  const compatibleStaff = action.branchId ? staff.filter((member) => !member.branchId || member.branchId === action.branchId || member.id === action.assignedStaffId) : staff;
 
   return (
     <article className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -306,7 +308,7 @@ function ActionCard({ action, busy, staff, onUpdate }: { action: ActionCenterRec
 
       <div className="mt-4 grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="grid gap-2 sm:grid-cols-2">
-          <SelectSmall label="Assign" value={action.assignedStaffId ?? ""} options={staff.map((member) => member.id)} labels={branchLabelMap(staff)} onChange={(value) => onUpdate(action.id, { assignedStaffId: value }, "Assignment updated.")} disabled={busy} />
+          <SelectSmall label="Assign" value={action.assignedStaffId ?? ""} options={compatibleStaff.map((member) => member.id)} labels={branchLabelMap(compatibleStaff)} onChange={(value) => onUpdate(action.id, { assignedStaffId: value || null }, value ? "Assignment updated." : "Assignment cleared.")} disabled={busy} />
           <SelectSmall label="Priority" value={action.priority} options={priorities} onChange={(value) => onUpdate(action.id, { priority: value }, "Priority updated.")} disabled={busy} />
           <FieldSmall label="Due date" type="date" value={action.dueDate ? dateInputValue(action.dueDate) : ""} onChange={(value) => onUpdate(action.id, { dueDate: value }, "Due date updated.")} disabled={busy} />
           <div className="flex flex-wrap items-end gap-2">
@@ -335,7 +337,7 @@ function ActionCard({ action, busy, staff, onUpdate }: { action: ActionCenterRec
   );
 }
 
-function StatusButton({ label, status, action, busy, onUpdate }: { label: string; status: string; action: ActionCenterRecord; busy: boolean; onUpdate: (id: string, payload: Record<string, string>, message: string) => Promise<void> }) {
+function StatusButton({ label, status, action, busy, onUpdate }: { label: string; status: string; action: ActionCenterRecord; busy: boolean; onUpdate: (id: string, payload: Record<string, string | null>, message: string) => Promise<boolean> }) {
   return (
     <button type="button" disabled={busy || action.status === status || action.status === "COMPLETED"} onClick={() => onUpdate(action.id, { status }, `Action moved to ${enumLabel(status)}.`)} className="focus-ring rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 disabled:opacity-50">
       {label}
@@ -375,11 +377,24 @@ function Select({ label, name, options, labels, required = false }: { label: str
   );
 }
 
-function SelectSmall({ label, value, options, labels, onChange, disabled }: { label: string; value: string; options: string[]; labels?: Record<string, string>; onChange: (value: string) => void; disabled: boolean }) {
+function SelectSmall({ label, value, options, labels, onChange, disabled }: { label: string; value: string; options: string[]; labels?: Record<string, string>; onChange: (value: string) => Promise<boolean>; disabled: boolean }) {
+  const [localValue, setLocalValue] = useState(value);
+
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  async function handleChange(nextValue: string) {
+    const previousValue = localValue;
+    setLocalValue(nextValue);
+    const ok = await onChange(nextValue);
+    if (!ok) setLocalValue(previousValue);
+  }
+
   return (
     <label>
       <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">{label}</span>
-      <select value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} className="focus-ring mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-navy-950 disabled:opacity-60">
+      <select value={localValue} disabled={disabled} onChange={(event) => handleChange(event.target.value)} className="focus-ring mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-navy-950 disabled:opacity-60">
         <option value="">None</option>
         {options.map((option) => <option key={option} value={option}>{labels?.[option] ?? enumLabel(option)}</option>)}
       </select>
