@@ -32,7 +32,7 @@ function isToday(value: Date) {
 }
 
 export async function getExecutivePackData() {
-  const [branches, staff, patients, orders, followUps, stockItems, reports, importBatches] = await Promise.all([
+  const [branches, staff, patients, orders, followUps, stockItems, reports, importBatches, operationalActions] = await Promise.all([
     prisma.branch.findMany({
       include: {
         patients: true,
@@ -49,10 +49,18 @@ export async function getExecutivePackData() {
     prisma.followUpTask.findMany({ include: { branch: true, patient: true, assignedStaff: true }, orderBy: { dueDate: "asc" } }),
     prisma.stockItem.findMany({ include: { branch: true }, orderBy: [{ status: "asc" }, { productName: "asc" }] }),
     prisma.report.findMany({ orderBy: { lastGeneratedAt: "desc" } }),
-    prisma.importBatch.findMany({ orderBy: { createdAt: "desc" } })
+    prisma.importBatch.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.operationalAction.findMany({
+      include: {
+        branch: true,
+        assignedStaff: true,
+        activities: { orderBy: { createdAt: "desc" } }
+      },
+      orderBy: [{ status: "asc" }, { priority: "desc" }, { dueDate: "asc" }]
+    })
   ]);
 
-  return { branches, staff, patients, orders, followUps, stockItems, reports, importBatches };
+  return { branches, staff, patients, orders, followUps, stockItems, reports, importBatches, operationalActions };
 }
 
 type ExecutivePackData = Awaited<ReturnType<typeof getExecutivePackData>>;

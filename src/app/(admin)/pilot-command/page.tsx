@@ -19,6 +19,15 @@ import { HorizontalBarChart, ProgressTimelineChart } from "@/components/simple-c
 import { getPilotCommandData as loadPilotCommandData } from "@/lib/data";
 import { formatCurrency } from "@/lib/format";
 import {
+  getAccountabilityAiSummary,
+  getAccountabilityMetrics,
+  getActionCategoryBreakdown,
+  getOpenVsCompletedChartData,
+  getOutcomeBreakdown,
+  toBranchChartData,
+  toStaffChartData
+} from "@/lib/accountability-intelligence";
+import {
   getDataImportCompletion,
   getImportCompletionChartData,
   getOperationalActivationScore,
@@ -74,6 +83,12 @@ export default async function PilotCommandPage() {
   const importChart = getImportCompletionChartData(data);
   const valueChart = getValueCreatedChartData(data);
   const riskChart = getRiskBreakdownChartData(data);
+  const execution = getAccountabilityMetrics(data.operationalActions);
+  const categoryChart = getActionCategoryBreakdown(data.operationalActions);
+  const branchExecutionChart = toBranchChartData(data.operationalActions);
+  const staffExecutionChart = toStaffChartData(data.operationalActions);
+  const outcomeChart = getOutcomeBreakdown(data.operationalActions);
+  const openCompletedChart = getOpenVsCompletedChartData(data.operationalActions);
 
   return (
     <div className="space-y-6">
@@ -124,6 +139,44 @@ export default async function PilotCommandPage() {
         <Kpi title="Orders needing action" value={String(command.kpis.ordersNeedingAction)} icon={<LineChart className="h-5 w-5" />} tone={command.kpis.ordersNeedingAction > 0 ? "amber" : "white"} />
         <Kpi title="Stock risks" value={String(command.kpis.stockRisks)} icon={<AlertTriangle className="h-5 w-5" />} tone={command.kpis.stockRisks > 0 ? "rose" : "white"} />
         <Kpi title="Branches needing attention" value={String(command.kpis.branchesNeedingAttention)} icon={<Flag className="h-5 w-5" />} tone={command.kpis.branchesNeedingAttention > 0 ? "amber" : "white"} />
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
+        <SectionHeader eyebrow="Pilot execution accountability" title="Is the pilot turning insight into completed work?" icon={<ClipboardCheck className="h-5 w-5" />} />
+        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Kpi title="Actions created" value={String(execution.totalActions)} icon={<ClipboardCheck className="h-5 w-5" />} />
+          <Kpi title="Actions completed" value={String(execution.completedActions)} icon={<CheckCircle2 className="h-5 w-5" />} tone="emerald" />
+          <Kpi title="Completion rate" value={`${execution.completionRate}%`} icon={<Target className="h-5 w-5" />} tone={execution.completionRate >= 60 ? "emerald" : "amber"} />
+          <Kpi title="Avg resolution" value={`${execution.averageResolutionDays} days`} icon={<LineChart className="h-5 w-5" />} />
+          <Kpi title="Overdue actions" value={String(execution.overdue)} icon={<AlertTriangle className="h-5 w-5" />} tone={execution.overdue > 0 ? "rose" : "white"} />
+          <Kpi title="Blocked actions" value={String(execution.blockedActions)} icon={<AlertTriangle className="h-5 w-5" />} tone={execution.blockedActions > 0 ? "amber" : "white"} />
+          <Kpi title="Revenue recovered" value={formatCurrency(execution.valueRecovered)} icon={<BarChart3 className="h-5 w-5" />} tone="emerald" />
+          <Kpi title="Revenue protected" value={formatCurrency(execution.valueProtected)} icon={<ShieldCheck className="h-5 w-5" />} tone="emerald" />
+        </div>
+        <p className="mt-5 rounded-lg bg-navy-950 p-4 text-sm font-semibold leading-7 text-white">{getAccountabilityAiSummary(data.operationalActions)}</p>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-2">
+        <Panel title="Completion By Category" eyebrow="Execution mix" icon={<BarChart3 className="h-5 w-5" />}>
+          <HorizontalBarChart data={categoryChart} tone="clinical" />
+        </Panel>
+        <Panel title="Open Versus Completed Actions" eyebrow="Execution health" icon={<LineChart className="h-5 w-5" />}>
+          <HorizontalBarChart data={openCompletedChart} tone="emerald" />
+        </Panel>
+        <Panel title="Execution By Branch" eyebrow="Branch accountability" icon={<Flag className="h-5 w-5" />}>
+          <HorizontalBarChart data={branchExecutionChart} valueType="percent" tone="navy" />
+        </Panel>
+        <Panel title="Execution By Staff" eyebrow="Staff accountability" icon={<UsersRound className="h-5 w-5" />}>
+          <HorizontalBarChart data={staffExecutionChart} tone="amber" />
+        </Panel>
+        <Panel title="Outcomes By Type" eyebrow="Recorded value" icon={<ShieldCheck className="h-5 w-5" />}>
+          <HorizontalBarChart data={outcomeChart} tone="emerald" />
+        </Panel>
+        <Panel title="Pilot Execution Commentary" eyebrow="Expansion readiness" icon={<Bot className="h-5 w-5" />}>
+          <ReviewLine label="What improved" value={`${execution.completedActions} actions have completed, with ${formatCurrency(execution.valueRecovered + execution.valueProtected)} in recorded recovered or protected value.`} />
+          <ReviewLine label="What remains unresolved" value={`${execution.overdue} overdue and ${execution.blockedActions} blocked actions still need management attention.`} />
+          <ReviewLine label="Staff adoption" value={execution.completionRate >= 60 ? "Execution discipline is strong enough to support the next pilot review." : "Staff adoption needs coaching before expanding the pilot scope."} />
+        </Panel>
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
@@ -263,8 +316,8 @@ function HeroMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Kpi({ title, value, icon, tone = "white" }: { title: string; value: string; icon: ReactNode; tone?: "white" | "amber" | "rose" }) {
-  const toneClass = tone === "amber" ? "bg-amber-50 text-amber-700" : tone === "rose" ? "bg-rose-50 text-rose-700" : "bg-white text-clinical-700";
+function Kpi({ title, value, icon, tone = "white" }: { title: string; value: string; icon: ReactNode; tone?: "white" | "amber" | "rose" | "emerald" }) {
+  const toneClass = tone === "amber" ? "bg-amber-50 text-amber-700" : tone === "rose" ? "bg-rose-50 text-rose-700" : tone === "emerald" ? "bg-emerald-50 text-emerald-700" : "bg-white text-clinical-700";
   return (
     <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-soft">
       <div className={`inline-flex h-10 w-10 items-center justify-center rounded-lg ${toneClass}`}>{icon}</div>

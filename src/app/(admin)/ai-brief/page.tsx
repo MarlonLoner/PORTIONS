@@ -13,6 +13,7 @@ import {
   TrendingUp,
   UsersRound
 } from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { AiBriefCard } from "@/components/ai-brief-card";
 import { StatCard } from "@/components/stat-card";
@@ -30,6 +31,11 @@ import {
 import type { NetworkHealthStatus } from "@/lib/ai-brief";
 import { enumLabel, formatCurrency, formatPercent } from "@/lib/format";
 import { getAiBriefData } from "@/lib/data";
+import {
+  getAccountabilityAiSummary,
+  getAccountabilityMetrics,
+  getAccountabilityRisks
+} from "@/lib/accountability-intelligence";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +63,8 @@ export default async function AiBriefPage() {
   const stock = getStockIntelligenceSummary(intelligence);
   const staffPlan = getStaffActionPlan(intelligence);
   const checklist = getDailyCommandChecklist(intelligence);
+  const accountability = getAccountabilityMetrics(briefData.operationalActions);
+  const accountabilityRisks = getAccountabilityRisks(briefData.operationalActions);
   const ordersNeedingAction = revenue.delayedOrders.length + briefData.orders.filter((order) => order.status === "PHARMACIST_REVIEW" || order.status === "AWAITING_PAYMENT" || order.status === "QUOTED").length;
   const branchesNeedingAttention = briefData.branches.filter((branch) => branch.health === "Watch" || branch.health === "Critical").length;
   const followUpsDueToday = briefData.followUps.filter((task) => {
@@ -131,6 +139,30 @@ export default async function AiBriefPage() {
             <MiniMetric label="High-value orders" value={String(revenue.highValueOrders.length)} />
           </div>
           <p className="mt-4 rounded-lg bg-clinical-50 p-4 text-sm leading-6 text-clinical-900">{revenue.explanation}</p>
+        </Panel>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[1.08fr_0.92fr]">
+        <AiBriefCard title="Execution Brief" variant="executive" action={accountabilityRisks.highestValueUnresolvedAction ? `Assign or clear ${accountabilityRisks.highestValueUnresolvedAction.title} before midday.` : "Create actions from today's highest-risk insights."}>
+          <p>{getAccountabilityAiSummary(briefData.operationalActions)}</p>
+          <div className="mt-4">
+            <Link href="/action-center" className="focus-ring inline-flex rounded-lg bg-white px-3 py-2 text-xs font-semibold text-navy-950 ring-1 ring-slate-200 transition hover:bg-clinical-50">
+              Open Action Center
+            </Link>
+          </div>
+        </AiBriefCard>
+
+        <Panel title="Execution Signals" eyebrow="Staff and branch accountability">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MiniMetric label="Urgent today" value={String(accountability.dueToday + accountability.overdue)} tone={accountability.dueToday + accountability.overdue > 0 ? "warn" : "normal"} />
+            <MiniMetric label="Overdue actions" value={String(accountability.overdue)} tone={accountability.overdue > 0 ? "risk" : "normal"} />
+            <MiniMetric label="Blocked actions" value={String(accountability.blockedActions)} tone={accountability.blockedActions > 0 ? "warn" : "normal"} />
+            <MiniMetric label="Highest value unresolved" value={accountabilityRisks.highestValueUnresolvedAction ? formatCurrency(accountabilityRisks.highestValueUnresolvedAction.valueAmount) : "$0"} />
+            <MiniMetric label="Largest branch workload" value={accountabilityRisks.branchWithLargestOpenWorkload?.branch ?? "None"} />
+            <MiniMetric label="Largest staff queue" value={accountabilityRisks.staffWithLargestAssignedWorkload?.staff ?? "None"} />
+            <MiniMetric label="Value recovered" value={formatCurrency(accountability.valueRecovered)} />
+            <MiniMetric label="Value protected" value={formatCurrency(accountability.valueProtected)} />
+          </div>
         </Panel>
       </section>
 

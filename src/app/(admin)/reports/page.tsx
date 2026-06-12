@@ -11,10 +11,21 @@ import {
   UsersRound
 } from "lucide-react";
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { ReportCard } from "@/components/report-card";
 import { StatCard } from "@/components/stat-card";
 import { getReportsData } from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/format";
+import {
+  getAccountabilityAiSummary,
+  getAccountabilityMetrics,
+  getActionCategoryBreakdown,
+  getAccountabilityRisks,
+  getBranchExecutionRanking,
+  getOutcomeBreakdown,
+  getRecentExecutionWins,
+  getStaffExecutionRanking
+} from "@/lib/accountability-intelligence";
 import {
   buildReportDocuments,
   getBranchManagerReportPack,
@@ -42,6 +53,13 @@ export default async function ReportsPage() {
   const branchManagerPack = getBranchManagerReportPack(reportData);
   const revenueProtectionPack = getRevenueProtectionPack(reportData);
   const stockControlPack = getStockControlPack(reportData);
+  const executionMetrics = getAccountabilityMetrics(reportData.operationalActions);
+  const executionRisks = getAccountabilityRisks(reportData.operationalActions);
+  const categoryBreakdown = getActionCategoryBreakdown(reportData.operationalActions).slice(0, 4);
+  const outcomeBreakdown = getOutcomeBreakdown(reportData.operationalActions).slice(0, 4);
+  const branchRanking = getBranchExecutionRanking(reportData.operationalActions).slice(0, 4);
+  const staffRanking = getStaffExecutionRanking(reportData.operationalActions).slice(0, 4);
+  const wins = getRecentExecutionWins(reportData.operationalActions);
 
   return (
     <div className="space-y-6">
@@ -96,6 +114,35 @@ export default async function ReportsPage() {
             No reports have been generated yet.
           </div>
         )}
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-700">Execution & Accountability Report</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy-950">Assigned work, outcomes, and value evidence</h2>
+            <p className="mt-3 max-w-4xl rounded-lg bg-navy-950 p-4 text-sm leading-7 text-white">{getAccountabilityAiSummary(reportData.operationalActions)}</p>
+          </div>
+          <Link href="/action-center" className="focus-ring rounded-lg bg-navy-950 px-4 py-2.5 text-sm font-semibold text-white">Open Action Center</Link>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <ExecMetric label="Total actions" value={String(executionMetrics.totalActions)} />
+          <ExecMetric label="Open / in progress" value={`${executionMetrics.openActions}/${executionMetrics.inProgressActions}`} />
+          <ExecMetric label="Blocked / completed" value={`${executionMetrics.blockedActions}/${executionMetrics.completedActions}`} />
+          <ExecMetric label="Completion rate" value={`${executionMetrics.completionRate}%`} />
+          <ExecMetric label="Overdue rate" value={`${executionMetrics.overdueRate}%`} tone={executionMetrics.overdueRate > 0 ? "risk" : "normal"} />
+          <ExecMetric label="Value recovered" value={formatCurrency(executionMetrics.valueRecovered)} tone="success" />
+          <ExecMetric label="Value protected" value={formatCurrency(executionMetrics.valueProtected)} tone="success" />
+          <ExecMetric label="Critical unresolved" value={String(executionMetrics.criticalActions)} tone={executionMetrics.criticalActions > 0 ? "risk" : "normal"} />
+        </div>
+        <div className="mt-5 grid gap-4 xl:grid-cols-3">
+          <ReportList title="Category breakdown" items={categoryBreakdown.map((item) => `${item.label}: ${item.detail ?? item.value}`)} />
+          <ReportList title="Outcome breakdown" items={outcomeBreakdown.map((item) => `${item.label}: ${item.value}`)} />
+          <ReportList title="Branch ranking" items={branchRanking.map((item) => `${item.branch}: ${item.completionRate}% completion, ${item.open} open`)} />
+          <ReportList title="Staff ranking" items={staffRanking.map((item) => `${item.staff}: ${item.completed} completed, ${item.assigned} active`)} />
+          <ReportList title="Recent execution wins" items={wins.map((item) => `${item.title}: ${formatCurrency(item.valueAmount)}`)} />
+          <ReportList title="Critical unresolved actions" items={executionRisks.overdueActions.concat(executionRisks.blockedActions).slice(0, 5).map((item) => item.title)} />
+        </div>
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
@@ -180,6 +227,27 @@ function HeroMetric({ label, value, tone = "normal" }: { label: string; value: s
     <div className="rounded-lg bg-white p-4 text-navy-950">
       <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">{label}</p>
       <p className={tone === "risk" ? "mt-2 text-2xl font-semibold text-rose-700" : "mt-2 text-2xl font-semibold text-navy-950"}>{value}</p>
+    </div>
+  );
+}
+
+function ExecMetric({ label, value, tone = "normal" }: { label: string; value: string; tone?: "normal" | "risk" | "success" }) {
+  const className = tone === "risk" ? "rounded-lg bg-rose-50 p-4 ring-1 ring-rose-100" : tone === "success" ? "rounded-lg bg-emerald-50 p-4 ring-1 ring-emerald-100" : "rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200";
+  return (
+    <div className={className}>
+      <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">{label}</p>
+      <p className="mt-2 text-xl font-semibold text-navy-950">{value}</p>
+    </div>
+  );
+}
+
+function ReportList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
+      <p className="font-semibold text-navy-950">{title}</p>
+      <div className="mt-3 space-y-2">
+        {items.length ? items.map((item) => <p key={item} className="text-sm leading-6 text-slate-700">{item}</p>) : <p className="text-sm leading-6 text-slate-500">No execution data yet.</p>}
+      </div>
     </div>
   );
 }

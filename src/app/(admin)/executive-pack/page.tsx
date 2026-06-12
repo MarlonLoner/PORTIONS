@@ -3,6 +3,13 @@ import type { ReactNode } from "react";
 import { ExecutivePackActions } from "@/components/executive-pack-actions";
 import { HorizontalBarChart, SnapshotGrid } from "@/components/simple-charts";
 import {
+  getAccountabilityMetrics,
+  getBranchExecutionRanking,
+  getOpenVsCompletedChartData,
+  getStaffExecutionRanking,
+  toBranchChartData
+} from "@/lib/accountability-intelligence";
+import {
   getBranchPerformanceChartData,
   getBranchPerformanceSummary,
   getChronicRetentionSummary,
@@ -41,6 +48,14 @@ export default async function ExecutivePackPage() {
   const branchChart = getBranchPerformanceChartData(data);
   const orderPipelineChart = getOrderPipelineChartData(data);
   const stockRiskChart = getStockRiskChartData(data);
+  const execution = getAccountabilityMetrics(data.operationalActions);
+  const branchExecution = getBranchExecutionRanking(data.operationalActions);
+  const staffExecution = getStaffExecutionRanking(data.operationalActions);
+  const topExecutionBranch = branchExecution.find((branch) => branch.total >= 2) ?? branchExecution[0];
+  const branchRequiringIntervention = [...branchExecution].sort((a, b) => b.overdue + b.blocked - (a.overdue + a.blocked))[0];
+  const staffHighlight = staffExecution.find((staffMember) => staffMember.staff !== "Unassigned") ?? staffExecution[0];
+  const openCompletedChart = getOpenVsCompletedChartData(data.operationalActions);
+  const branchExecutionChart = toBranchChartData(data.operationalActions);
 
   return (
     <div className="executive-pack space-y-6">
@@ -112,6 +127,27 @@ export default async function ExecutivePackPage() {
 
       <ReportSection title="Executive Value Snapshot" eyebrow="Visual evidence" icon={<BarChart3 className="h-5 w-5" />}>
         <SnapshotGrid data={executiveValueChart} valueType="currency" />
+      </ReportSection>
+
+      <ReportSection title="Execution Results" eyebrow="Accountability proof" icon={<ClipboardCheck className="h-5 w-5" />}>
+        <MetricGrid>
+          <Metric label="Actions assigned" value={String(execution.totalActions)} />
+          <Metric label="Actions completed" value={String(execution.completedActions)} />
+          <Metric label="Completion rate" value={`${execution.completionRate}%`} />
+          <Metric label="Overdue actions" value={String(execution.overdue)} />
+          <Metric label="Critical issues" value={String(execution.criticalActions)} />
+          <Metric label="Revenue recovered" value={formatCurrency(execution.valueRecovered)} />
+          <Metric label="Revenue protected" value={formatCurrency(execution.valueProtected)} />
+          <Metric label="Avg resolution" value={`${execution.averageResolutionDays} days`} />
+        </MetricGrid>
+        <Narrative
+          label="Executive accountability narrative"
+          value={`PORTIONS converted operational intelligence into assigned work. During the review period, ${execution.completedActions} actions were completed, ${formatCurrency(execution.valueRecovered)} in revenue was recovered, and ${formatCurrency(execution.valueProtected)} in recurring or operational value was protected. ${topExecutionBranch?.branch ?? "No branch"} is the current execution benchmark, while ${branchRequiringIntervention?.branch ?? "no branch"} requires management attention. Staff execution highlight: ${staffHighlight?.staff ?? "No assigned staff data yet"}.`}
+        />
+        <div className="mt-5 grid gap-5 xl:grid-cols-2">
+          <HorizontalBarChart data={openCompletedChart} tone="emerald" />
+          <HorizontalBarChart data={branchExecutionChart} valueType="percent" tone="navy" />
+        </div>
       </ReportSection>
 
       <div className="grid gap-6 xl:grid-cols-3">

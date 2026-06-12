@@ -22,6 +22,12 @@ import { AiBriefCard } from "@/components/ai-brief-card";
 import { StatCard } from "@/components/stat-card";
 import { enumLabel, formatCurrency, formatPercent } from "@/lib/format";
 import { getDashboardData } from "@/lib/data";
+import {
+  getAccountabilityMetrics,
+  getAccountabilityRisks,
+  getBranchExecutionRanking,
+  getStaffExecutionRanking
+} from "@/lib/accountability-intelligence";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +37,11 @@ export default async function DashboardPage() {
   const topUrgency = [...data.followUpUrgency].sort((a, b) => b.count - a.count)[0];
   const activePipeline = data.orderPipeline.filter((item) => item.count > 0);
   const revenueIntensity = Math.min((data.totalRevenueToday / Math.max(data.totalRevenueToday + 1200, 1)) * 100, 92);
+  const accountability = getAccountabilityMetrics(data.operationalActions);
+  const accountabilityRisks = getAccountabilityRisks(data.operationalActions);
+  const topBranchExecution = getBranchExecutionRanking(data.operationalActions).find((branch) => branch.total >= 2) ?? getBranchExecutionRanking(data.operationalActions)[0];
+  const branchNeedingExecution = [...getBranchExecutionRanking(data.operationalActions)].sort((a, b) => b.overdue + b.blocked - (a.overdue + a.blocked))[0];
+  const topStaffExecutor = getStaffExecutionRanking(data.operationalActions).find((staff) => staff.staff !== "Unassigned");
 
   return (
     <div className="space-y-6">
@@ -111,6 +122,39 @@ export default async function DashboardPage() {
         <StatCard title="Overdue refill patients" value={String(data.overdueRefillPatients)} helper="Retention risk requiring follow-up" icon={<AlertTriangle className="h-5 w-5" />} tone="rose" trend="Risk" />
         <StatCard title="Pharmacist reviews" value={String(data.pendingPharmacistReviews)} helper="Orders waiting for clinical review" icon={<ClipboardCheck className="h-5 w-5" />} tone="amber" trend="Clinical" />
         <StatCard title="Active stock alerts" value={String(data.stockAlertCount)} helper="Low, expiry, dead, and overstock issues" icon={<PackageCheck className="h-5 w-5" />} trend="Stock" />
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="section-title">Execution & Accountability</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy-950">Are insights becoming completed work?</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              PORTIONS tracks whether operational risks are assigned, completed, and converted into recovered or protected value.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/action-center" className="focus-ring rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white">Open Action Center</Link>
+            <Link href="/action-center?dueState=Overdue" className="focus-ring rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">Review overdue actions</Link>
+            <Link href="/executive-pack" className="focus-ring rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">View Executive Pack</Link>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <MiniExecMetric label="Open actions" value={String(accountability.openActions)} />
+          <MiniExecMetric label="Due today" value={String(accountability.dueToday)} tone={accountability.dueToday > 0 ? "warn" : "normal"} />
+          <MiniExecMetric label="Overdue" value={String(accountability.overdue)} tone={accountability.overdue > 0 ? "risk" : "normal"} />
+          <MiniExecMetric label="Critical" value={String(accountability.criticalActions)} tone={accountability.criticalActions > 0 ? "risk" : "normal"} />
+          <MiniExecMetric label="Completion rate" value={`${accountability.completionRate}%`} />
+          <MiniExecMetric label="Completed this week" value={String(accountability.completedThisWeek)} />
+          <MiniExecMetric label="Value recovered" value={formatCurrency(accountability.valueRecovered)} tone="success" />
+          <MiniExecMetric label="Value protected" value={formatCurrency(accountability.valueProtected)} tone="success" />
+        </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <SignalTile icon={<CheckCircle2 className="h-4 w-4" />} label="Top execution branch" value={topBranchExecution?.branch ?? "No action data"} helper={topBranchExecution ? `${topBranchExecution.completionRate}% completion` : "Create actions to rank branch execution."} tone="success" />
+          <SignalTile icon={<MessageSquareWarning className="h-4 w-4" />} label="Needs attention" value={branchNeedingExecution?.branch ?? "No action data"} helper={branchNeedingExecution ? `${branchNeedingExecution.overdue} overdue, ${branchNeedingExecution.blocked} blocked` : "No branch action pressure yet."} tone="risk" />
+          <SignalTile icon={<ClipboardCheck className="h-4 w-4" />} label="Top staff executor" value={topStaffExecutor?.staff ?? "No staff data"} helper={topStaffExecutor ? `${topStaffExecutor.completed} completed actions` : "Assign actions to staff to build rankings."} tone="blue" />
+          <SignalTile icon={<Target className="h-4 w-4" />} label="Most urgent action" value={accountabilityRisks.highestValueUnresolvedAction?.title ?? "No urgent action"} helper={accountabilityRisks.highestValueUnresolvedAction ? formatCurrency(accountabilityRisks.highestValueUnresolvedAction.valueAmount) : "Action Center is ready for assignments."} tone="blue" />
+        </div>
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.28fr_0.72fr]">
@@ -213,6 +257,23 @@ function HeroLink({ href, label }: { href: string; label: string }) {
       {label}
       <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
     </Link>
+  );
+}
+
+function MiniExecMetric({ label, value, tone = "normal" }: { label: string; value: string; tone?: "normal" | "warn" | "risk" | "success" }) {
+  const className =
+    tone === "risk"
+      ? "rounded-lg border border-rose-100 bg-rose-50 p-3"
+      : tone === "warn"
+        ? "rounded-lg border border-amber-100 bg-amber-50 p-3"
+        : tone === "success"
+          ? "rounded-lg border border-emerald-100 bg-emerald-50 p-3"
+          : "rounded-lg border border-slate-100 bg-slate-50 p-3";
+  return (
+    <div className={className}>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-navy-950">{value}</p>
+    </div>
   );
 }
 

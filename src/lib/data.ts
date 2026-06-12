@@ -100,7 +100,7 @@ function branchMetrics(branch: BranchMetricsInput) {
 }
 
 export async function getDashboardData() {
-  const [branches, orders, patients, followUps, stockItems] = await Promise.all([
+  const [branches, orders, patients, followUps, stockItems, operationalActions] = await Promise.all([
     prisma.branch.findMany({
       include: {
         orders: true,
@@ -113,7 +113,15 @@ export async function getDashboardData() {
     prisma.order.findMany({ include: { branch: true }, orderBy: { createdAt: "desc" } }),
     prisma.patient.findMany({ include: { branch: true } }),
     prisma.followUpTask.findMany({ include: { branch: true }, orderBy: { dueDate: "asc" } }),
-    prisma.stockItem.findMany({ include: { branch: true } })
+    prisma.stockItem.findMany({ include: { branch: true } }),
+    prisma.operationalAction.findMany({
+      include: {
+        branch: true,
+        assignedStaff: true,
+        activities: { orderBy: { createdAt: "desc" } }
+      },
+      orderBy: [{ status: "asc" }, { priority: "desc" }, { dueDate: "asc" }]
+    })
   ]);
 
   const todaysOrders = orders.filter((order) => isToday(order.createdAt));
@@ -151,7 +159,8 @@ export async function getDashboardData() {
       status,
       count: orders.filter((order) => order.status === status).length
     })),
-    stockAlertCount: stockItems.filter((item) => item.status !== StockStatus.HEALTHY).length
+    stockAlertCount: stockItems.filter((item) => item.status !== StockStatus.HEALTHY).length,
+    operationalActions
   };
 }
 
@@ -445,7 +454,7 @@ export async function getStockData(filters: {
 }
 
 export async function getAiBriefData() {
-  const [dashboard, branches, stock, orders, patients, followUps, rawBranches, stockItems] = await Promise.all([
+  const [dashboard, branches, stock, orders, patients, followUps, rawBranches, stockItems, operationalActions] = await Promise.all([
     getDashboardData(),
     getBranchOverview(),
     getStockData(),
@@ -461,10 +470,18 @@ export async function getAiBriefData() {
       },
       orderBy: { name: "asc" }
     }),
-    prisma.stockItem.findMany({ include: { branch: true }, orderBy: [{ status: "asc" }, { productName: "asc" }] })
+    prisma.stockItem.findMany({ include: { branch: true }, orderBy: [{ status: "asc" }, { productName: "asc" }] }),
+    prisma.operationalAction.findMany({
+      include: {
+        branch: true,
+        assignedStaff: true,
+        activities: { orderBy: { createdAt: "desc" } }
+      },
+      orderBy: [{ status: "asc" }, { priority: "desc" }, { dueDate: "asc" }]
+    })
   ]);
 
-  return { dashboard, branches, stock, orders, patients, followUps, rawBranches, stockItems };
+  return { dashboard, branches, stock, orders, patients, followUps, rawBranches, stockItems, operationalActions };
 }
 
 export async function getReports() {
@@ -472,17 +489,25 @@ export async function getReports() {
 }
 
 export async function getReportsData() {
-  const [reports, dashboard, branches, stock, orders, patients, followUps] = await Promise.all([
+  const [reports, dashboard, branches, stock, orders, patients, followUps, operationalActions] = await Promise.all([
     getReports(),
     getDashboardData(),
     getBranchOverview(),
     getStockData(),
     prisma.order.findMany({ include: { branch: true, assignedStaff: true }, orderBy: { createdAt: "desc" } }),
     prisma.patient.findMany({ include: { branch: true, refillEvents: true }, orderBy: { nextRefillDate: "asc" } }),
-    prisma.followUpTask.findMany({ include: { branch: true, assignedStaff: true }, orderBy: { dueDate: "asc" } })
+    prisma.followUpTask.findMany({ include: { branch: true, assignedStaff: true }, orderBy: { dueDate: "asc" } }),
+    prisma.operationalAction.findMany({
+      include: {
+        branch: true,
+        assignedStaff: true,
+        activities: { orderBy: { createdAt: "desc" } }
+      },
+      orderBy: [{ status: "asc" }, { priority: "desc" }, { dueDate: "asc" }]
+    })
   ]);
 
-  return { reports, dashboard, branches, stock, orders, patients, followUps };
+  return { reports, dashboard, branches, stock, orders, patients, followUps, operationalActions };
 }
 
 export async function getSettingsData() {
@@ -539,7 +564,7 @@ export async function getPilotRequestsData() {
 }
 
 export async function getPilotCommandData() {
-  const [branches, staff, patients, orders, followUps, stockItems, reports, importBatches] = await Promise.all([
+  const [branches, staff, patients, orders, followUps, stockItems, reports, importBatches, operationalActions] = await Promise.all([
     prisma.branch.findMany({
       include: {
         patients: true,
@@ -556,10 +581,18 @@ export async function getPilotCommandData() {
     prisma.followUpTask.findMany({ include: { branch: true, patient: true, assignedStaff: true }, orderBy: { dueDate: "asc" } }),
     prisma.stockItem.findMany({ include: { branch: true }, orderBy: [{ status: "asc" }, { productName: "asc" }] }),
     prisma.report.findMany({ orderBy: { lastGeneratedAt: "desc" } }),
-    prisma.importBatch.findMany({ orderBy: { createdAt: "desc" } })
+    prisma.importBatch.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.operationalAction.findMany({
+      include: {
+        branch: true,
+        assignedStaff: true,
+        activities: { orderBy: { createdAt: "desc" } }
+      },
+      orderBy: [{ status: "asc" }, { priority: "desc" }, { dueDate: "asc" }]
+    })
   ]);
 
-  return { branches, staff, patients, orders, followUps, stockItems, reports, importBatches };
+  return { branches, staff, patients, orders, followUps, stockItems, reports, importBatches, operationalActions };
 }
 
 export async function getImportBatchesData() {
