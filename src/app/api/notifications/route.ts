@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { getNotificationCopyMessage, getNotificationInbox, getNotificationSuggestedAction } from "@/lib/notifications";
+import { getNotificationCopyMessage, getNotificationInbox, getNotificationSuggestedAction, reconcileNotifications } from "@/lib/notifications";
 
 export async function GET() {
   try {
+    await reconcileNotifications();
     const notifications = await getNotificationInbox();
     return NextResponse.json(notifications.map((notification) => ({
       ...notification,

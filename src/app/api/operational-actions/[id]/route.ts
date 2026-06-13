@@ -5,6 +5,7 @@ import {
   Prisma
 } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { resolveNotificationsForOperationalAction } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 
 function cleanString(value: unknown) {
@@ -163,6 +164,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       },
       include: { branch: true, assignedStaff: true, activities: { orderBy: { createdAt: "desc" } } }
     });
+
+    await resolveNotificationsForOperationalAction(updated);
 
     return NextResponse.json(updated);
   } catch (error) {

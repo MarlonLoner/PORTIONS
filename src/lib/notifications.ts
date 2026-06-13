@@ -5,8 +5,11 @@ import {
   NotificationSeverity,
   NotificationStatus,
   NotificationType,
+  FollowUpStatus,
+  OrderStatus,
   OperationalActionPriority,
   OperationalActionStatus,
+  StockStatus,
   Prisma
 } from "@prisma/client";
 import { formatDate } from "@/lib/format";
@@ -22,6 +25,19 @@ const activeActionStatuses: OperationalActionStatus[] = [
   OperationalActionStatus.OPEN,
   OperationalActionStatus.IN_PROGRESS,
   OperationalActionStatus.BLOCKED
+];
+
+const paidOrClosedOrderStatuses: OrderStatus[] = [
+  OrderStatus.PAID,
+  OrderStatus.PACKED,
+  OrderStatus.DISPATCHED,
+  OrderStatus.DELIVERED,
+  OrderStatus.CANCELLED
+];
+
+const openFollowUpStatuses: FollowUpStatus[] = [
+  FollowUpStatus.PENDING,
+  FollowUpStatus.SNOOZED
 ];
 
 export const notificationStatuses = Object.values(NotificationStatus);
@@ -86,6 +102,138 @@ function isDueToday(action: ActionForNotification) {
 
 function isOverdue(action: ActionForNotification) {
   return Boolean(action.dueDate && action.dueDate < startOfToday() && isActiveAction(action));
+}
+
+function isActiveNotificationStatus(status: NotificationStatus) {
+  return unresolvedNotificationStatuses.includes(status);
+}
+
+function normalizeSourceType(sourceType: string | null | undefined) {
+  return (sourceType ?? "").trim().toUpperCase().replace(/-/g, "_");
+}
+
+async function resolveNotificationIds(ids: string[], resolvedAt = new Date()) {
+  const uniqueIds = Array.from(new Set(ids));
+  if (!uniqueIds.length) return 0;
+
+  const result = await prisma.notification.updateMany({
+    where: {
+      id: { in: uniqueIds },
+      status: { in: unresolvedNotificationStatuses }
+    },
+    data: {
+      status: NotificationStatus.RESOLVED,
+      resolvedAt
+    }
+  });
+
+  return result.count;
+}
+
+export async function resolveNotificationsForSource({
+  actionId,
+  sourceType,
+  sourceId,
+  resolvedAt = new Date()
+}: {
+  actionId?: string | null;
+  sourceType?: string | null;
+  sourceId?: string | null;
+  resolvedAt?: Date;
+}) {
+  const or: Prisma.NotificationWhereInput[] = [];
+  if (actionId) or.push({ actionId });
+  if (sourceType && sourceId) or.push({ sourceType, sourceId });
+
+  if (!or.length) return 0;
+
+  const result = await prisma.notification.updateMany({
+    where: {
+      OR: or,
+      status: { in: unresolvedNotificationStatuses }
+    },
+    data: {
+      status: NotificationStatus.RESOLVED,
+      resolvedAt
+    }
+  });
+
+  return result.count;
+}
+
+export async function resolveNotificationsForOperationalAction(action: {
+  id: string;
+  status: OperationalActionStatus;
+  sourceType?: string | null;
+  sourceId?: string | null;
+}) {
+  if (action.status !== OperationalActionStatus.COMPLETED && action.status !== OperationalActionStatus.CANCELLED) {
+    return 0;
+  }
+
+  return resolveNotificationsForSource({
+    actionId: action.id,
+    sourceType: action.sourceType,
+    sourceId: action.sourceId
+  });
+}
+
+async function sourceIsResolved(notification: Pick<NotificationRecord, "sourceType" | "sourceId" | "actionId" | "action">) {
+  if (notification.action && !isActiveAction(notification.action)) return true;
+  if (!notification.sourceType || !notification.sourceId) return false;
+
+  const sourceType = normalizeSourceType(notification.sourceType);
+
+  if (sourceType === "BRANCH") {
+    const overdueActions = await prisma.operationalAction.count({
+      where: {
+        branchId: notification.sourceId,
+        status: { in: activeActionStatuses },
+        dueDate: { lt: startOfToday() }
+      }
+    });
+    return overdueActions === 0;
+  }
+
+  if (["FOLLOW_UP_TASK", "FOLLOWUP_TASK", "FOLLOW_UP", "FOLLOWUP"].includes(sourceType)) {
+    const task = await prisma.followUpTask.findUnique({ where: { id: notification.sourceId } });
+    return Boolean(task && !openFollowUpStatuses.includes(task.status));
+  }
+
+  if (sourceType === "ORDER") {
+    const order = await prisma.order.findUnique({ where: { id: notification.sourceId } });
+    return Boolean(order && paidOrClosedOrderStatuses.includes(order.status));
+  }
+
+  if (sourceType === "STOCK" || sourceType === "STOCK_ITEM") {
+    const stockItem = await prisma.stockItem.findUnique({ where: { id: notification.sourceId } });
+    return Boolean(stockItem && stockItem.status === StockStatus.HEALTHY);
+  }
+
+  if (sourceType === "OPERATIONAL_ACTION") {
+    const action = await prisma.operationalAction.findUnique({ where: { id: notification.sourceId } });
+    return Boolean(action && !activeActionStatuses.includes(action.status));
+  }
+
+  return false;
+}
+
+export async function reconcileNotifications() {
+  const activeNotifications = await prisma.notification.findMany({
+    where: { status: { in: unresolvedNotificationStatuses } },
+    include: {
+      branch: true,
+      recipientStaff: true,
+      action: { include: { branch: true, assignedStaff: true } }
+    }
+  });
+  const staleIds: string[] = [];
+
+  for (const notification of activeNotifications) {
+    if (await sourceIsResolved(notification)) staleIds.push(notification.id);
+  }
+
+  return resolveNotificationIds(staleIds);
 }
 
 export function getNotificationRecipient(action?: ActionForNotification | null, fallback: NotificationRecipientType = NotificationRecipientType.MANAGEMENT) {
@@ -215,6 +363,7 @@ export async function getEscalationCandidates() {
 }
 
 export async function generateOperationalNotifications() {
+  const automaticallyResolved = await reconcileNotifications();
   const candidates = await getEscalationCandidates();
   let created = 0;
   let skipped = 0;
@@ -239,7 +388,7 @@ export async function generateOperationalNotifications() {
     created += 1;
   }
 
-  return { created, skipped, evaluated: candidates.length };
+  return { created, skipped, evaluated: candidates.length, automaticallyResolved };
 }
 
 export async function getNotificationInbox() {

@@ -2,11 +2,12 @@ import { AlertTriangle, BellRing, CheckCircle2, ClipboardCheck, MessageSquareWar
 import Link from "next/link";
 import { NotificationsInbox, type NotificationInboxRecord } from "@/components/notifications-inbox";
 import { StatCard } from "@/components/stat-card";
-import { getNotificationInbox, getNotificationCopyMessage, getNotificationSuggestedAction, getNotificationSummary, getEscalationAiSummary } from "@/lib/notifications";
+import { getNotificationInbox, getNotificationCopyMessage, getNotificationSuggestedAction, getNotificationSummary, getEscalationAiSummary, reconcileNotifications } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
 export default async function NotificationsPage() {
+  await reconcileNotifications();
   const notifications = await getNotificationInbox();
   const summary = getNotificationSummary(notifications);
   const records: NotificationInboxRecord[] = notifications.map((notification) => ({

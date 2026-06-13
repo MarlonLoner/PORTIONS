@@ -83,7 +83,7 @@ export function NotificationsInbox({ initialNotifications }: { initialNotificati
     const inbox = await fetch("/api/notifications").then((res) => res.json());
     setNotifications(inbox.map(toRecord));
     setBusyId("");
-    setFeedback(`Refresh complete: ${result.created} created, ${result.skipped} skipped.`);
+    setFeedback(`${result.created} new alerts created, ${result.skipped} already existed, and ${result.automaticallyResolved ?? 0} completed alerts were resolved.`);
   }
 
   async function updateNotification(id: string, payload: Record<string, string>, message: string) {
