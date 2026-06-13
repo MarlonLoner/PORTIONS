@@ -1,12 +1,13 @@
 import { ArrowLeft, CalendarPlus } from "lucide-react";
 import Link from "next/link";
-import { eventPriorities, eventTypes, createEventFromForm, getEventFormOptions } from "@/lib/events";
+import { eventPriorities, eventTypes, createEventFromForm, getEventCommandData, getEventFormOptions } from "@/lib/events";
 import { enumLabel } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewEventPage() {
-  const { branches, staff } = await getEventFormOptions();
+  const [{ branches, staff }, eventData] = await Promise.all([getEventFormOptions(), getEventCommandData()]);
+  const completedEvents = eventData.allEvents.filter((event) => event.status === "COMPLETED").slice(0, 5);
 
   async function createAction(formData: FormData) {
     "use server";
@@ -62,6 +63,28 @@ export default async function NewEventPage() {
           <Link href="/events" className="focus-ring rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700">Cancel</Link>
         </div>
       </form>
+
+      <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+        <div className="rounded-lg border border-clinical-100 bg-clinical-50 p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-800">Planning intelligence</p>
+          <h2 className="mt-2 text-xl font-semibold tracking-tight text-navy-950">Start with what previous events taught the team</h2>
+          <p className="mt-3 text-sm leading-7 text-clinical-950">
+            Enter company, venue, event type, and branch details first. PORTIONS will compare the saved event against prior activations, promotion blockers, spend, attendance, leads, and patient registration outcomes.
+          </p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Recent event lessons</p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {completedEvents.length ? completedEvents.map((event) => (
+              <div key={event.id} className="rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
+                <p className="font-semibold text-navy-950">{event.title}</p>
+                <p className="mt-1 text-xs text-slate-500">{event.branch?.name ?? "Network"} / {event.eventType.replace(/_/g, " ")}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{event.review?.nextTimeRecommendations ?? "Capture a review next time to improve event recommendations."}</p>
+              </div>
+            )) : <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-500">No past event reviews yet. The first completed review will become the benchmark for future event planning.</p>}
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

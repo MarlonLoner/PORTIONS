@@ -100,7 +100,7 @@ function branchMetrics(branch: BranchMetricsInput) {
 }
 
 export async function getDashboardData() {
-  const [branches, orders, patients, followUps, stockItems, operationalActions, notifications] = await Promise.all([
+  const [branches, orders, patients, followUps, stockItems, operationalActions, notifications, events] = await Promise.all([
     prisma.branch.findMany({
       include: {
         orders: true,
@@ -129,6 +129,17 @@ export async function getDashboardData() {
         action: { include: { branch: true, assignedStaff: true } }
       },
       orderBy: [{ status: "asc" }, { severity: "desc" }, { createdAt: "desc" }]
+    }),
+    prisma.event.findMany({
+      include: {
+        branch: true,
+        ownerStaff: true,
+        checklistItems: { include: { assignedStaff: true, operationalAction: { include: { assignedStaff: true, branch: true } } } },
+        expenses: true,
+        activities: { orderBy: { createdAt: "desc" } },
+        review: true
+      },
+      orderBy: { startDate: "asc" }
     })
   ]);
 
@@ -169,7 +180,8 @@ export async function getDashboardData() {
     })),
     stockAlertCount: stockItems.filter((item) => item.status !== StockStatus.HEALTHY).length,
     operationalActions,
-    notifications
+    notifications,
+    events
   };
 }
 
@@ -469,7 +481,7 @@ export async function getStockData(filters: {
 }
 
 export async function getAiBriefData() {
-  const [dashboard, branches, stock, orders, patients, followUps, rawBranches, stockItems, operationalActions, notifications] = await Promise.all([
+  const [dashboard, branches, stock, orders, patients, followUps, rawBranches, stockItems, operationalActions, notifications, events] = await Promise.all([
     getDashboardData(),
     getBranchOverview(),
     getStockData(),
@@ -501,10 +513,21 @@ export async function getAiBriefData() {
         action: { include: { branch: true, assignedStaff: true } }
       },
       orderBy: [{ status: "asc" }, { severity: "desc" }, { createdAt: "desc" }]
+    }),
+    prisma.event.findMany({
+      include: {
+        branch: true,
+        ownerStaff: true,
+        checklistItems: { include: { assignedStaff: true, operationalAction: { include: { assignedStaff: true, branch: true } } } },
+        expenses: true,
+        activities: { orderBy: { createdAt: "desc" } },
+        review: true
+      },
+      orderBy: { startDate: "asc" }
     })
   ]);
 
-  return { dashboard, branches, stock, orders, patients, followUps, rawBranches, stockItems, operationalActions, notifications };
+  return { dashboard, branches, stock, orders, patients, followUps, rawBranches, stockItems, operationalActions, notifications, events };
 }
 
 export async function getReports() {
@@ -512,7 +535,7 @@ export async function getReports() {
 }
 
 export async function getReportsData() {
-  const [reports, dashboard, branches, stock, orders, patients, followUps, operationalActions] = await Promise.all([
+  const [reports, dashboard, branches, stock, orders, patients, followUps, operationalActions, events] = await Promise.all([
     getReports(),
     getDashboardData(),
     getBranchOverview(),
@@ -527,10 +550,21 @@ export async function getReportsData() {
         activities: { orderBy: { createdAt: "desc" } }
       },
       orderBy: [{ status: "asc" }, { priority: "desc" }, { dueDate: "asc" }]
+    }),
+    prisma.event.findMany({
+      include: {
+        branch: true,
+        ownerStaff: true,
+        checklistItems: { include: { assignedStaff: true, operationalAction: { include: { assignedStaff: true, branch: true } } } },
+        expenses: true,
+        activities: { orderBy: { createdAt: "desc" } },
+        review: true
+      },
+      orderBy: { startDate: "asc" }
     })
   ]);
 
-  return { reports, dashboard, branches, stock, orders, patients, followUps, operationalActions };
+  return { reports, dashboard, branches, stock, orders, patients, followUps, operationalActions, events };
 }
 
 export async function getSettingsData() {

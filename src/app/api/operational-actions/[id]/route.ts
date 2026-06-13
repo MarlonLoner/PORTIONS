@@ -165,6 +165,24 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       include: { branch: true, assignedStaff: true, activities: { orderBy: { createdAt: "desc" } } }
     });
 
+    if (updated.status === OperationalActionStatus.COMPLETED && updated.sourceType === "EVENT_CHECKLIST_ITEM" && updated.sourceId) {
+      const checklistItem = await prisma.eventChecklistItem.findUnique({ where: { id: updated.sourceId }, include: { event: true } });
+      if (checklistItem && checklistItem.operationalActionId === updated.id && checklistItem.status !== "COMPLETED") {
+        await prisma.eventChecklistItem.update({
+          where: { id: checklistItem.id },
+          data: { status: "COMPLETED", completedAt: updated.completedAt ?? new Date() }
+        });
+        await prisma.eventActivity.create({
+          data: {
+            eventId: checklistItem.eventId,
+            activityType: "CHECKLIST_ACTION_COMPLETED",
+            description: `Linked Action Center item completed: ${checklistItem.title}.`,
+            actorName: "PORTIONS"
+          }
+        });
+      }
+    }
+
     await resolveNotificationsForOperationalAction(updated);
 
     return NextResponse.json(updated);

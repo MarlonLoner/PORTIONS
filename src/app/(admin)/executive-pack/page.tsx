@@ -29,6 +29,7 @@ import {
 } from "@/lib/executive-pack";
 import { formatCurrency } from "@/lib/format";
 import { getEscalationAiSummary, getNotificationSummary } from "@/lib/notifications";
+import { getEventFundingSummary, getEventReadinessSummary } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,19 @@ export default async function ExecutivePackPage() {
   const openCompletedChart = getOpenVsCompletedChartData(data.operationalActions);
   const branchExecutionChart = toBranchChartData(data.operationalActions);
   const notificationSummary = getNotificationSummary(data.notifications);
+  const completedEvents = data.events.filter((event) => event.status === "COMPLETED");
+  const upcomingEvents = data.events.filter((event) => event.startDate >= new Date() && event.status !== "COMPLETED" && event.status !== "CANCELLED");
+  const eventApprovedBudget = data.events.reduce((sum, event) => sum + Number(event.approvedBudget ?? 0), 0);
+  const eventActualSpend = data.events.reduce((sum, event) => sum + Number(event.actualSpend ?? 0), 0);
+  const eventRevenue = data.events.reduce((sum, event) => sum + Number(event.revenueGenerated ?? event.review?.revenueGenerated ?? 0), 0);
+  const eventLeads = data.events.reduce((sum, event) => sum + (event.leadsGenerated ?? event.review?.leadsGenerated ?? 0), 0);
+  const eventPatients = data.events.reduce((sum, event) => sum + (event.patientsRegistered ?? event.review?.patientsRegistered ?? 0), 0);
+  const strongestEvent = [...completedEvents].sort((a, b) => Number(b.revenueGenerated ?? b.review?.revenueGenerated ?? 0) - Number(a.revenueGenerated ?? a.review?.revenueGenerated ?? 0))[0];
+  const eventRequiringIntervention = [...data.events].filter((event) => event.status !== "COMPLETED" && event.status !== "CANCELLED").sort((a, b) => {
+    const aReadiness = getEventReadinessSummary(a);
+    const bReadiness = getEventReadinessSummary(b);
+    return (bReadiness.riskLevel === "Critical" ? 4 : bReadiness.riskLevel === "High" ? 3 : bReadiness.riskLevel === "Medium" ? 2 : 1) - (aReadiness.riskLevel === "Critical" ? 4 : aReadiness.riskLevel === "High" ? 3 : aReadiness.riskLevel === "Medium" ? 2 : 1);
+  })[0];
 
   return (
     <div className="executive-pack space-y-6">
@@ -257,6 +271,24 @@ export default async function ExecutivePackPage() {
             </article>
           ))}
         </div>
+      </ReportSection>
+
+      <ReportSection title="Event Execution" eyebrow="Calendar, funding, and promotion evidence" icon={<BarChart3 className="h-5 w-5" />}>
+        <MetricGrid>
+          <Metric label="Events completed" value={String(completedEvents.length)} />
+          <Metric label="Upcoming events" value={String(upcomingEvents.length)} />
+          <Metric label="Approved budget" value={formatCurrency(eventApprovedBudget)} />
+          <Metric label="Actual spend" value={formatCurrency(eventActualSpend)} />
+          <Metric label="Leads" value={String(eventLeads)} />
+          <Metric label="Patient registrations" value={String(eventPatients)} />
+          <Metric label="Revenue generated" value={formatCurrency(eventRevenue)} />
+          <Metric label="ROI" value={eventActualSpend > 0 ? `${Math.round(((eventRevenue - eventActualSpend) / eventActualSpend) * 100)}%` : "Not enough data"} />
+        </MetricGrid>
+        <div className="mt-5 grid gap-4 xl:grid-cols-2">
+          <Narrative label="Strongest event" value={strongestEvent ? `${strongestEvent.title} generated ${formatCurrency(strongestEvent.revenueGenerated ?? strongestEvent.review?.revenueGenerated ?? 0)} and ${strongestEvent.leadsGenerated ?? strongestEvent.review?.leadsGenerated ?? 0} leads.` : "No completed event has enough outcome data yet."} />
+          <Narrative label="Event requiring intervention" value={eventRequiringIntervention ? `${eventRequiringIntervention.title} is ${getEventReadinessSummary(eventRequiringIntervention).score}% ready with ${getEventFundingSummary(eventRequiringIntervention).risk.toLowerCase()} funding risk. ${getEventReadinessSummary(eventRequiringIntervention).nextBestAction}` : "No active event intervention is required."} />
+        </div>
+        <Narrative label="Management recommendation" value="Keep event approvals tied to readiness, funding release, checklist ownership, and post-event reviews. Do not approve the next event calendar without assigning owners for promotion, technology, lead capture, and review evidence." />
       </ReportSection>
 
       <ReportSection title="Rollout Recommendation" eyebrow="Final decision" icon={<ShieldCheck className="h-5 w-5" />}>

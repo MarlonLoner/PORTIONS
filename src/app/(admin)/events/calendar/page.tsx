@@ -1,7 +1,7 @@
 import { CalendarRange, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
-import { getCalendarMonths, getEventCommandData, getReadinessScore } from "@/lib/events";
+import { getCalendarMonths, getEventCommandData, getEventReadinessSummary, getReadinessScore } from "@/lib/events";
 import { enumLabel, formatCurrency, formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -72,6 +72,9 @@ export default async function EventCalendarPage({ searchParams }: { searchParams
                     <Mini label="Branch" value={event.branch?.name ?? "Network"} />
                     <Mini label="Owner" value={event.ownerStaff?.name ?? "Unassigned"} />
                     <Mini label="Budget" value={formatCurrency(event.approvedBudget ?? event.proposedBudget ?? 0)} />
+                    <Mini label="Funding" value={enumLabel(event.fundingStatus)} />
+                    <Mini label="Risk" value={getEventReadinessSummary(event).riskLevel} />
+                    <Mini label="Checklist" value={`${getEventReadinessSummary(event).checklist.percentage}%`} />
                   </div>
                   <div className="mt-3 flex items-center justify-between text-xs font-semibold text-slate-500">
                     <span>Readiness</span>

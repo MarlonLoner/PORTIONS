@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowUpRight,
   Building2,
+  CalendarDays,
   CalendarClock,
   CheckCircle2,
   ClipboardCheck,
@@ -29,6 +30,7 @@ import {
   getStaffExecutionRanking
 } from "@/lib/accountability-intelligence";
 import { getEscalationAiSummary, getNotificationSummary } from "@/lib/notifications";
+import { getEventMetrics, getEventNextAction, getEventReadinessSummary } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +46,9 @@ export default async function DashboardPage() {
   const branchNeedingExecution = [...getBranchExecutionRanking(data.operationalActions)].sort((a, b) => b.overdue + b.blocked - (a.overdue + a.blocked))[0];
   const topStaffExecutor = getStaffExecutionRanking(data.operationalActions).find((staff) => staff.staff !== "Unassigned");
   const notificationSummary = getNotificationSummary(data.notifications);
+  const eventMetrics = getEventMetrics(data.events);
+  const nextEvent = data.events.find((event) => event.startDate >= new Date() && event.status !== "CANCELLED" && event.status !== "COMPLETED");
+  const nextEventReadiness = nextEvent ? getEventReadinessSummary(nextEvent) : null;
 
   return (
     <div className="space-y-6">
@@ -124,6 +129,42 @@ export default async function DashboardPage() {
         <StatCard title="Overdue refill patients" value={String(data.overdueRefillPatients)} helper="Retention risk requiring follow-up" icon={<AlertTriangle className="h-5 w-5" />} tone="rose" trend="Risk" />
         <StatCard title="Pharmacist reviews" value={String(data.pendingPharmacistReviews)} helper="Orders waiting for clinical review" icon={<ClipboardCheck className="h-5 w-5" />} tone="amber" trend="Clinical" />
         <StatCard title="Active stock alerts" value={String(data.stockAlertCount)} helper="Low, expiry, dead, and overstock issues" icon={<PackageCheck className="h-5 w-5" />} trend="Stock" />
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="section-title">Event Execution</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy-950">Calendar, funding, and preparation risk</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              Event Command tracks whether approved activations have owners, funding, checklists, and post-event review discipline.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/events" className="focus-ring rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white">Open Event Command</Link>
+            <Link href="/events?status=SUBMITTED" className="focus-ring rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">Review approvals</Link>
+            <Link href="/events/calendar" className="focus-ring rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">Open calendar</Link>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <MiniExecMetric label="Upcoming events" value={String(eventMetrics.upcomingEvents)} />
+          <MiniExecMetric label="Awaiting approval" value={String(eventMetrics.awaitingApproval)} tone={eventMetrics.awaitingApproval > 0 ? "warn" : "normal"} />
+          <MiniExecMetric label="Awaiting funding" value={String(eventMetrics.awaitingFunding)} tone={eventMetrics.awaitingFunding > 0 ? "warn" : "normal"} />
+          <MiniExecMetric label="Events at risk" value={String(eventMetrics.atRiskEvents)} tone={eventMetrics.atRiskEvents > 0 ? "risk" : "normal"} />
+          <MiniExecMetric label="Overdue checklist" value={String(data.events.flatMap((event) => event.checklistItems).filter((item) => item.dueDate && item.dueDate < new Date() && item.status !== "COMPLETED" && item.status !== "NOT_REQUIRED").length)} tone="warn" />
+          <MiniExecMetric label="Approved budget" value={formatCurrency(eventMetrics.totalApprovedBudget)} />
+          <MiniExecMetric label="Next event" value={nextEvent?.title ?? "No upcoming event"} />
+          <MiniExecMetric label="Readiness" value={nextEventReadiness ? `${nextEventReadiness.score}%` : "No event"} tone={nextEventReadiness && nextEventReadiness.riskLevel !== "Low" ? "warn" : "normal"} />
+        </div>
+        {nextEvent ? (
+          <div className="mt-5 rounded-lg bg-clinical-50 p-4 ring-1 ring-clinical-100">
+            <div className="flex items-center gap-2 text-clinical-800">
+              <CalendarDays className="h-4 w-4" aria-hidden="true" />
+              <p className="text-sm font-semibold">Next decision required</p>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-clinical-900">{getEventNextAction(nextEvent)}</p>
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">

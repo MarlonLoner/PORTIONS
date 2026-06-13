@@ -3,10 +3,23 @@ import { ArrowLeft, CalendarClock, CheckCircle2, ClipboardCheck, History, Megaph
 import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
 import {
+  assignEventChecklistItem,
+  createLinkedChecklistAction,
   createEventExpense,
+  getEventAssignmentReason,
   getEventAiSummary,
   getEventById,
+  getEventChecklistCompatibleStaff,
+  getEventChecklistRecommendedAssignee,
+  getEventCommandData,
+  getEventFundingSummary,
   getEventNextAction,
+  getEventPromotionPlaybook,
+  getEventReadinessSummary,
+  getHistoricalEventLessons,
+  getHistoricalPromotionInsights,
+  getPastEventBenchmarks,
+  getRelevantPastEvents,
   getReadinessScore,
   getStatusActionLabel,
   getSupportedStatusActions,
@@ -20,11 +33,17 @@ export const dynamic = "force-dynamic";
 
 export default async function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const event = await getEventById(id);
+  const [event, commandData] = await Promise.all([getEventById(id), getEventCommandData()]);
   if (!event) notFound();
 
   const readiness = getReadinessScore(event);
+  const readinessSummary = getEventReadinessSummary(event);
+  const funding = getEventFundingSummary(event);
   const statusActions = getSupportedStatusActions(event);
+  const openActions = commandData.allEvents.flatMap((item) => item.checklistItems.map((checklist) => checklist.operationalAction).filter(Boolean)).map((action) => ({ assignedStaffId: action!.assignedStaffId, status: action!.status, dueDate: action!.dueDate }));
+  const relevantPastEvents = getRelevantPastEvents(event, commandData.allEvents);
+  const benchmarks = getPastEventBenchmarks(relevantPastEvents);
+  const playbook = getEventPromotionPlaybook(event, commandData.staff);
 
   async function statusAction(formData: FormData) {
     "use server";
@@ -38,6 +57,28 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
     const itemId = String(formData.get("itemId"));
     const status = String(formData.get("status")) as EventChecklistStatus;
     await updateChecklistItem(itemId, id, status);
+  }
+
+  async function checklistAssignAction(formData: FormData) {
+    "use server";
+    await assignEventChecklistItem(String(formData.get("itemId")), id, String(formData.get("assignedStaffId") || "") || null);
+  }
+
+  async function checklistAssignRecommendedAction(formData: FormData) {
+    "use server";
+    const item = await getEventById(id);
+    if (!item) return;
+    const checklistItem = item.checklistItems.find((entry) => entry.id === String(formData.get("itemId")));
+    if (!checklistItem) return;
+    const data = await getEventCommandData();
+    const actions = data.allEvents.flatMap((entry) => entry.checklistItems.map((checklist) => checklist.operationalAction).filter(Boolean)).map((action) => ({ assignedStaffId: action!.assignedStaffId, status: action!.status, dueDate: action!.dueDate }));
+    const recommended = getEventChecklistRecommendedAssignee(item, checklistItem, data.staff, actions);
+    await assignEventChecklistItem(checklistItem.id, id, recommended?.id ?? null);
+  }
+
+  async function checklistCreateAction(formData: FormData) {
+    "use server";
+    await createLinkedChecklistAction(String(formData.get("itemId")), id);
   }
 
   async function expenseAction(formData: FormData) {
@@ -104,6 +145,12 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-800">AI event coach</p>
             <p className="mt-3 text-sm leading-7 text-clinical-950">{getEventAiSummary(event)}</p>
             <p className="mt-4 rounded-lg bg-white p-3 text-sm font-semibold leading-6 text-navy-950 ring-1 ring-clinical-100">{getEventNextAction(event)}</p>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              <Mini label="Readiness label" value={readinessSummary.label} />
+              <Mini label="Risk level" value={readinessSummary.riskLevel} />
+              <Mini label="Countdown" value={`${readinessSummary.daysUntilStart} days`} />
+              <Mini label="Checklist" value={`${readinessSummary.checklist.percentage}% complete`} />
+            </div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Command actions</p>
@@ -132,6 +179,11 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
           <div className="mt-5 space-y-3">
             {event.checklistItems.length ? event.checklistItems.map((item) => (
               <div key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                {(() => {
+                  const compatibleStaff = getEventChecklistCompatibleStaff(event, commandData.staff);
+                  const recommended = getEventChecklistRecommendedAssignee(event, item, commandData.staff, openActions);
+                  return (
+                    <>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.12em] text-clinical-700">{item.category}</p>
@@ -141,6 +193,33 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
                   </div>
                   <StatusBadge status={item.status} />
                 </div>
+                <div className="mt-3 rounded-lg bg-white p-3 ring-1 ring-slate-200">
+                  <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Recommended owner</p>
+                  <p className="mt-1 text-sm font-semibold text-navy-950">{recommended?.name ?? "No compatible staff configured"}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">{getEventAssignmentReason(event, item, recommended, openActions)}</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+                    <form action={checklistAssignAction} className="flex gap-2">
+                      <input type="hidden" name="itemId" value={item.id} />
+                      <select name="assignedStaffId" defaultValue={item.assignedStaffId ?? ""} className="focus-ring h-9 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-navy-950">
+                        <option value="">Unassigned</option>
+                        {compatibleStaff.map((member) => <option key={member.id} value={member.id}>{member.name}{member.role ? ` - ${member.role}` : ""}</option>)}
+                      </select>
+                      <button className="focus-ring rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">Assign</button>
+                    </form>
+                    <form action={checklistAssignRecommendedAction}>
+                      <input type="hidden" name="itemId" value={item.id} />
+                      <button disabled={!recommended} className="focus-ring rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Assign recommended</button>
+                    </form>
+                    {item.operationalAction ? (
+                      <Link href={`/action-center/${item.operationalAction.id}`} className="focus-ring rounded-lg bg-clinical-50 px-3 py-2 text-xs font-semibold text-clinical-800 ring-1 ring-clinical-100">Open linked action</Link>
+                    ) : (
+                      <form action={checklistCreateAction}>
+                        <input type="hidden" name="itemId" value={item.id} />
+                        <button className="focus-ring rounded-lg bg-clinical-50 px-3 py-2 text-xs font-semibold text-clinical-800 ring-1 ring-clinical-100">Create linked action</button>
+                      </form>
+                    )}
+                  </div>
+                </div>
                 <form action={checklistAction} className="mt-3 flex flex-wrap gap-2">
                   <input type="hidden" name="itemId" value={item.id} />
                   <select name="status" defaultValue={item.status} className="focus-ring h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-navy-950">
@@ -148,6 +227,9 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
                   </select>
                   <button className="focus-ring rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">Update</button>
                 </form>
+                    </>
+                  );
+                })()}
               </div>
             )) : <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-500">No checklist items are configured yet.</p>}
           </div>
@@ -163,11 +245,16 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
               </div>
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <Mini label="Proposed" value={formatCurrency(event.proposedBudget ?? 0)} />
-              <Mini label="Approved" value={formatCurrency(event.approvedBudget ?? 0)} />
-              <Mini label="Funds released" value={formatCurrency(event.fundsReleased ?? 0)} />
-              <Mini label="Actual spend" value={formatCurrency(event.actualSpend ?? 0)} />
+              <Mini label="Proposed" value={formatCurrency(funding.proposedBudget)} />
+              <Mini label="Approved" value={formatCurrency(funding.approvedBudget)} />
+              <Mini label="Funds released" value={formatCurrency(funding.fundsReleased)} />
+              <Mini label="Planned expenses" value={formatCurrency(funding.plannedExpenses)} />
+              <Mini label="Approved expenses" value={formatCurrency(funding.approvedExpenses)} />
+              <Mini label="Paid expenses" value={formatCurrency(funding.paidExpenses)} />
+              <Mini label="Remaining balance" value={formatCurrency(funding.remainingBalance)} />
+              <Mini label="Funding risk" value={funding.risk} />
             </div>
+            <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm leading-6 text-amber-900 ring-1 ring-amber-100">{funding.nextAction}</p>
             <div className="mt-5 space-y-3">
               {event.expenses.length ? event.expenses.map((expense) => (
                 <div key={expense.id} className="rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200">
@@ -210,6 +297,52 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
                 </div>
               )) : <p className="rounded-lg bg-slate-50 p-5 text-sm leading-6 text-slate-600 ring-1 ring-slate-200">No event activity has been recorded yet.</p>}
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[1fr_0.9fr]">
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-700">Past-event intelligence</p>
+          <h2 className="mt-2 text-xl font-semibold tracking-tight text-navy-950">Relevant event history</h2>
+          <p className="mt-3 rounded-lg bg-clinical-50 p-4 text-sm leading-6 text-clinical-900">{getHistoricalPromotionInsights(event, relevantPastEvents)}</p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <Mini label="Attendance benchmark" value={benchmarks.attendanceBenchmark ? String(benchmarks.attendanceBenchmark) : "Not enough data"} />
+            <Mini label="Spend benchmark" value={benchmarks.spendBenchmark ? formatCurrency(benchmarks.spendBenchmark) : "Not enough data"} />
+            <Mini label="Lead benchmark" value={benchmarks.leadBenchmark ? String(benchmarks.leadBenchmark) : "Not enough data"} />
+          </div>
+          <div className="mt-5 space-y-3">
+            {relevantPastEvents.length ? relevantPastEvents.map((past) => (
+              <div key={past.id} className="rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
+                <p className="font-semibold text-navy-950">{past.title}</p>
+                <p className="mt-1 text-xs text-slate-500">{formatDate(past.startDate)} / {past.branch?.name ?? "Network"} / {formatCurrency(past.approvedBudget ?? 0)}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{past.review?.nextTimeRecommendations ?? "No review recommendation captured."}</p>
+              </div>
+            )) : <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-500">No matching event history yet. This event will become a future benchmark after review.</p>}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-700">Promotion playbook</p>
+          <h2 className="mt-2 text-xl font-semibold tracking-tight text-navy-950">{playbook.phase}</h2>
+          <div className="mt-5 space-y-3">
+            {playbook.suggestions.slice(0, 5).map((suggestion) => (
+              <div key={suggestion.action} className="rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
+                <div className="flex flex-wrap justify-between gap-2">
+                  <p className="font-semibold text-navy-950">{suggestion.action}</p>
+                  <p className="text-xs font-semibold text-slate-500">{formatDate(suggestion.deadline)}</p>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">Owner: {suggestion.owner}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{suggestion.reason}</p>
+                <p className="mt-2 rounded-lg bg-white p-3 text-xs leading-5 text-slate-600 ring-1 ring-slate-100">{suggestion.copy}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 rounded-lg bg-rose-50 p-4 ring-1 ring-rose-100">
+            <p className="text-sm font-semibold text-rose-900">Promotion risks</p>
+            <ul className="mt-2 space-y-1 text-sm leading-6 text-rose-800">
+              {playbook.risks.map((risk) => <li key={risk}>{risk}</li>)}
+            </ul>
           </div>
         </div>
       </section>

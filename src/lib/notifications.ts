@@ -6,6 +6,10 @@ import {
   NotificationStatus,
   NotificationType,
   FollowUpStatus,
+  EventChecklistStatus,
+  EventExpenseStatus,
+  EventStatus,
+  FundingStatus,
   OrderStatus,
   OperationalActionPriority,
   OperationalActionStatus,
@@ -13,6 +17,12 @@ import {
   Prisma
 } from "@prisma/client";
 import { formatDate } from "@/lib/format";
+import {
+  getEventDaysUntilStart,
+  getEventFundingGap,
+  getEventFundingRisk,
+  getEventReadinessScore
+} from "@/lib/events";
 import { prisma } from "@/lib/prisma";
 
 const unresolvedNotificationStatuses: NotificationStatus[] = [
@@ -321,7 +331,7 @@ export async function resolveNotificationsForOperationalAction(action: {
   });
 }
 
-async function sourceIsResolved(notification: Pick<NotificationRecord, "sourceType" | "sourceId" | "actionId" | "action">) {
+async function sourceIsResolved(notification: Pick<NotificationRecord, "type" | "sourceType" | "sourceId" | "actionId" | "action">) {
   if (notification.action && !isActiveAction(notification.action)) return true;
   if (!notification.sourceType || !notification.sourceId) return false;
 
@@ -356,6 +366,30 @@ async function sourceIsResolved(notification: Pick<NotificationRecord, "sourceTy
   if (sourceType === "OPERATIONAL_ACTION") {
     const action = await prisma.operationalAction.findUnique({ where: { id: notification.sourceId } });
     return Boolean(action && !activeActionStatuses.includes(action.status));
+  }
+
+  if (sourceType === "EVENT") {
+    const event = await prisma.event.findUnique({ where: { id: notification.sourceId }, include: { checklistItems: true, expenses: true, review: true } });
+    if (!event) return true;
+    if (notification.type === NotificationType.EVENT_APPROVAL_REQUIRED) return event.status !== EventStatus.SUBMITTED;
+    if (notification.type === NotificationType.EVENT_FUNDING_REQUIRED) return event.fundingStatus === FundingStatus.FUNDED || getEventFundingGap(event as any) <= 0;
+    if (notification.type === NotificationType.EVENT_READINESS_RISK) return getEventReadinessScore(event as any) >= 85 || event.status === EventStatus.COMPLETED || event.status === EventStatus.CANCELLED;
+    if (notification.type === NotificationType.EVENT_STARTING_SOON) return event.status === EventStatus.COMPLETED || event.status === EventStatus.CANCELLED || getEventDaysUntilStart(event as any) < 0;
+    if (notification.type === NotificationType.EVENT_REVIEW_DUE) return Boolean(event.review) || event.status !== EventStatus.COMPLETED;
+    if (notification.type === NotificationType.EVENT_BUDGET_RISK) return getEventFundingRisk(event as any) === "Low";
+    if (notification.type === NotificationType.EVENT_OWNER_UNASSIGNED) return Boolean(event.ownerStaffId) || event.status === EventStatus.CANCELLED;
+  }
+
+  if (sourceType === "EVENT_CHECKLIST_ITEM") {
+    const item = await prisma.eventChecklistItem.findUnique({ where: { id: notification.sourceId } });
+    if (!item) return true;
+    if (notification.type === NotificationType.EVENT_CHECKLIST_BLOCKED) return item.status !== EventChecklistStatus.BLOCKED;
+    return item.status === EventChecklistStatus.COMPLETED || item.status === EventChecklistStatus.NOT_REQUIRED;
+  }
+
+  if (sourceType === "EVENT_EXPENSE") {
+    const expense = await prisma.eventExpense.findUnique({ where: { id: notification.sourceId } });
+    return Boolean(!expense || expense.status === EventExpenseStatus.PAID || expense.status === EventExpenseStatus.REJECTED);
   }
 
   return false;
@@ -475,6 +509,7 @@ export function getNotificationMessage(type: NotificationType, action?: ActionFo
   if (type === NotificationType.CRITICAL_ACTION) return `Critical action: '${actionTitle}' requires management attention now. Assign, start, or resolve before close.`;
   if (type === NotificationType.BRANCH_ESCALATION) return `Management attention required: ${context?.count ?? 0} overdue actions at ${branchName}, including ${context?.criticalCount ?? 0} critical items.`;
   if (type === NotificationType.PILOT_REVIEW) return "Pilot review reminder: confirm evidence, action completion, and unresolved escalation items before the next owner review.";
+  if (String(type).startsWith("EVENT_")) return `Event execution alert: ${context?.branchName ?? "review Event Command"} needs attention before the event timeline slips.`;
   return `PORTIONS alert: ${actionTitle} needs review.`;
 }
 
@@ -485,6 +520,7 @@ export function getNotificationSuggestedAction(notification: Pick<NotificationRe
   if (notification.type === NotificationType.ACTION_UNASSIGNED) return "Assign a staff owner in Action Center.";
   if (notification.type === NotificationType.CRITICAL_ACTION) return "Prioritize this before routine work.";
   if (notification.type === NotificationType.BRANCH_ESCALATION) return `Ask ${notification.branch?.name ?? "the branch"} manager to acknowledge the backlog.`;
+  if (String(notification.type).startsWith("EVENT_")) return "Open Event Command and clear the linked approval, funding, checklist, or review blocker.";
   return notification.actionId ? "Open the linked action and update status." : "Review and acknowledge this alert.";
 }
 
@@ -518,14 +554,25 @@ function notificationTitle(type: NotificationType, action?: ActionForNotificatio
   if (type === NotificationType.ACTION_UNASSIGNED) return `Unassigned high-priority action: ${action?.title}`;
   if (type === NotificationType.CRITICAL_ACTION) return `Critical action requires attention: ${action?.title}`;
   if (type === NotificationType.BRANCH_ESCALATION) return `Branch escalation: ${branchName}`;
+  if (String(type).startsWith("EVENT_")) return enumNotificationTitle(type);
   return "PORTIONS notification";
 }
 
+function enumNotificationTitle(type: NotificationType) {
+  return type.toLowerCase().split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+}
+
 export async function getEscalationCandidates() {
-  const actions = await prisma.operationalAction.findMany({
-    include: { branch: true, assignedStaff: true },
-    orderBy: [{ priority: "desc" }, { dueDate: "asc" }]
-  });
+  const [actions, events] = await Promise.all([
+    prisma.operationalAction.findMany({
+      include: { branch: true, assignedStaff: true },
+      orderBy: [{ priority: "desc" }, { dueDate: "asc" }]
+    }),
+    prisma.event.findMany({
+      include: { branch: true, ownerStaff: true, checklistItems: true, expenses: true, review: true },
+      orderBy: [{ startDate: "asc" }]
+    })
+  ]);
 
   const candidates: Prisma.NotificationCreateManyInput[] = [];
   for (const action of actions) {
@@ -565,7 +612,66 @@ export async function getEscalationCandidates() {
     });
   }
 
+  for (const event of events) {
+    candidates.push(...eventNotificationCandidates(event as any));
+  }
+
   return candidates;
+}
+
+function eventNotificationCandidates(event: Prisma.EventGetPayload<{ include: { branch: true; ownerStaff: true; checklistItems: true; expenses: true; review: true } }>) {
+  const candidates: Prisma.NotificationCreateManyInput[] = [];
+  const daysUntil = getEventDaysUntilStart(event as any);
+  const readiness = getEventReadinessScore(event as any);
+  const branchName = event.branch?.name ?? "Network";
+  const eventBase = {
+    branchId: event.branchId,
+    recipientType: event.ownerStaffId ? NotificationRecipientType.STAFF : NotificationRecipientType.MANAGEMENT,
+    recipientStaffId: event.ownerStaffId,
+    recipientRole: event.ownerStaffId ? null : "Management",
+    sourceType: "EVENT",
+    sourceId: event.id,
+    triggeredAt: new Date(),
+    deliveryChannel: NotificationDeliveryChannel.IN_APP,
+    deliveryStatus: NotificationDeliveryStatus.NOT_REQUIRED
+  };
+
+  if (event.status === EventStatus.SUBMITTED) candidates.push(eventCandidate(NotificationType.EVENT_APPROVAL_REQUIRED, NotificationSeverity.HIGH, event, "Event approval required", `${event.title} is submitted and waiting for leadership approval.`, eventBase));
+  if ((event.status === EventStatus.APPROVED || event.status === EventStatus.FUNDING_PENDING) && getEventFundingGap(event as any) > 0 && daysUntil <= 14) candidates.push(eventCandidate(NotificationType.EVENT_FUNDING_REQUIRED, NotificationSeverity.HIGH, event, "Event funding required", `${event.title} needs funding release before preparation stalls.`, eventBase));
+  if (daysUntil >= 0 && ((daysUntil <= 14 && readiness < 50) || (daysUntil <= 7 && readiness < 70) || (daysUntil <= 3 && readiness < 85))) candidates.push(eventCandidate(NotificationType.EVENT_READINESS_RISK, daysUntil <= 3 ? NotificationSeverity.CRITICAL : NotificationSeverity.HIGH, event, "Event readiness risk", `${event.title} starts in ${daysUntil} days and is ${readiness}% ready.`, eventBase));
+  if (daysUntil >= 0 && daysUntil <= 1 && event.status !== EventStatus.COMPLETED && event.status !== EventStatus.CANCELLED) candidates.push(eventCandidate(NotificationType.EVENT_STARTING_SOON, NotificationSeverity.MEDIUM, event, "Event starting soon", `${event.title} starts ${daysUntil === 0 ? "today" : "tomorrow"} at ${branchName}.`, eventBase));
+  if (event.status === EventStatus.COMPLETED && !event.review) candidates.push(eventCandidate(NotificationType.EVENT_REVIEW_DUE, NotificationSeverity.MEDIUM, event, "Event review due", `${event.title} is complete but review results have not been captured.`, eventBase));
+  if (getEventFundingRisk(event as any) === "High" || getEventFundingRisk(event as any) === "Critical") candidates.push(eventCandidate(NotificationType.EVENT_BUDGET_RISK, NotificationSeverity.HIGH, event, "Event budget risk", `${event.title} has funding or budget risk that needs a decision.`, eventBase));
+  const ownerRequiredStatuses = new Set<EventStatus>([EventStatus.APPROVED, EventStatus.FUNDING_PENDING, EventStatus.FUNDED, EventStatus.PREPARATION]);
+  if (!event.ownerStaffId && ownerRequiredStatuses.has(event.status)) candidates.push(eventCandidate(NotificationType.EVENT_OWNER_UNASSIGNED, NotificationSeverity.HIGH, event, "Event owner unassigned", `${event.title} needs a named owner before preparation can move reliably.`, eventBase));
+
+  for (const item of event.checklistItems) {
+    if (item.status === EventChecklistStatus.COMPLETED || item.status === EventChecklistStatus.NOT_REQUIRED || !item.dueDate) continue;
+    const checklistBase = { ...eventBase, sourceType: "EVENT_CHECKLIST_ITEM", sourceId: item.id, scheduledFor: item.dueDate };
+    const dueToday = item.dueDate >= startOfToday() && item.dueDate < endOfToday();
+    const overdue = item.dueDate < startOfToday();
+    if (dueToday) candidates.push(eventCandidate(NotificationType.EVENT_CHECKLIST_DUE, NotificationSeverity.MEDIUM, event, `Event checklist due: ${item.title}`, `${item.title} is due today for ${event.title}.`, checklistBase));
+    if (overdue) candidates.push(eventCandidate(NotificationType.EVENT_CHECKLIST_OVERDUE, NotificationSeverity.HIGH, event, `Event checklist overdue: ${item.title}`, `${item.title} is overdue for ${event.title}.`, checklistBase));
+    if (item.status === EventChecklistStatus.BLOCKED) candidates.push(eventCandidate(NotificationType.EVENT_CHECKLIST_BLOCKED, NotificationSeverity.HIGH, event, `Event checklist blocked: ${item.title}`, `${item.title} is blocked and needs escalation before ${event.title}.`, checklistBase));
+  }
+
+  return candidates;
+}
+
+function eventCandidate(type: NotificationType, severity: NotificationSeverity, event: { id: string; title: string; status: EventStatus; fundingStatus: FundingStatus }, title: string, message: string, base: Partial<Prisma.NotificationCreateManyInput>) {
+  return {
+    type,
+    severity,
+    status: NotificationStatus.UNREAD,
+    title,
+    message,
+    ...base,
+    metadata: {
+      eventId: event.id,
+      eventStatus: event.status,
+      fundingStatus: event.fundingStatus
+    }
+  } as Prisma.NotificationCreateManyInput;
 }
 
 export async function generateOperationalNotifications() {

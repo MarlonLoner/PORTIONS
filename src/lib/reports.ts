@@ -1,5 +1,6 @@
-import { FollowUpStatus, OrderStatus, PatientStatus, ReportType, RiskScore, StockStatus } from "@prisma/client";
+import { EventStatus, FollowUpStatus, OrderStatus, PatientStatus, ReportType, RiskScore, StockStatus } from "@prisma/client";
 import { enumLabel, formatCurrency, formatPercent } from "@/lib/format";
+import { getEventFundingSummary, getEventReadinessScore } from "@/lib/events";
 
 type Money = number | string | { toString(): string };
 type ReportStatus = "Ready" | "Needs Review" | "Action Required";
@@ -57,6 +58,21 @@ type ReportData = {
     status: FollowUpStatus | string;
     dueDate: Date;
   }>;
+  events: Array<{
+    status: EventStatus | string;
+    startDate: Date;
+    proposedBudget: Money | null;
+    approvedBudget: Money | null;
+    actualSpend: Money | null;
+    revenueGenerated: Money | null;
+    leadsGenerated: number | null;
+    patientsRegistered: number | null;
+    actualAttendance: number | null;
+    eventType: string;
+    checklistItems: Array<{ status: string; dueDate: Date | null }>;
+    expenses: Array<{ status: string; amount: Money }>;
+    review?: { attendance: number; leadsGenerated: number; revenueGenerated: Money; patientsRegistered: number } | null;
+  }>;
 };
 
 const reportUseCases: Record<ReportType, string> = {
@@ -65,7 +81,8 @@ const reportUseCases: Record<ReportType, string> = {
   [ReportType.CHRONIC_RETENTION]: "Chronic revenue protection, adherence recovery, and VIP care discipline.",
   [ReportType.ONLINE_SALES]: "Online sales pipeline review, payment recovery, and dispatch control.",
   [ReportType.STOCK_RISK]: "Stock controller review, reorder prioritization, and branch transfer planning.",
-  [ReportType.STAFF_FOLLOW_UP]: "Follow-up team accountability, completion discipline, and response coaching."
+  [ReportType.STAFF_FOLLOW_UP]: "Follow-up team accountability, completion discipline, and response coaching.",
+  [ReportType.EVENT_PERFORMANCE]: "Event calendar, budget discipline, preparation readiness, and post-event evidence."
 };
 
 function moneySum<T>(items: T[], selector: (item: T) => Money) {
@@ -128,6 +145,14 @@ export function getReportStatus(report: ReportData["reports"][number], data: Rep
     return "Ready";
   }
 
+  if (report.type === ReportType.EVENT_PERFORMANCE) {
+    const atRisk = data.events.filter((event) => getEventReadinessScore(event as any) < 70 && event.status !== EventStatus.COMPLETED && event.status !== EventStatus.CANCELLED).length;
+    const budgetRisk = data.events.filter((event) => getEventFundingSummary(event as any).risk !== "Low").length;
+    if (atRisk > 0 || budgetRisk > 0) return "Action Required";
+    if (data.events.some((event) => event.status === EventStatus.SUBMITTED || event.status === EventStatus.FUNDING_PENDING)) return "Needs Review";
+    return "Ready";
+  }
+
   if (overdueFollowUps > 8) return "Action Required";
   if (overdueFollowUps > 0) return "Needs Review";
   return "Ready";
@@ -143,7 +168,8 @@ export function getReportKeyMetric(report: ReportData["reports"][number], data: 
     [ReportType.CHRONIC_RETENTION]: `${data.dashboard.overdueRefillPatients + highRiskPatients} retention risks`,
     [ReportType.ONLINE_SALES]: `${formatCurrency(getAwaitingPaymentValue(data))} stuck revenue`,
     [ReportType.STOCK_RISK]: `${formatCurrency(data.stock.smartCards.nearExpiryValue)} expiry exposure`,
-    [ReportType.STAFF_FOLLOW_UP]: `${overdueFollowUps} overdue follow-ups`
+    [ReportType.STAFF_FOLLOW_UP]: `${overdueFollowUps} overdue follow-ups`,
+    [ReportType.EVENT_PERFORMANCE]: `${data.events.filter((event) => event.status === EventStatus.COMPLETED).length}/${data.events.length} events completed`
   };
 
   return metrics[report.type] ?? report.keyMetric;
@@ -161,7 +187,8 @@ export function getReportAiSummary(report: ReportData["reports"][number], data: 
     [ReportType.CHRONIC_RETENTION]: `${data.dashboard.overdueRefillPatients} overdue refill patients and ${data.dashboard.chronicDueToday} patients due today need retention discipline. Staff should confirm collection or delivery before patients drift.`,
     [ReportType.ONLINE_SALES]: `${formatCurrency(awaitingPaymentValue)} is sitting in quote or awaiting-payment stages. Payment reminders and pharmacist review clearance are the fastest sales protection actions.`,
     [ReportType.STOCK_RISK]: `${data.stock.smartCards.lowStockRisks} low-stock risks and ${formatCurrency(data.stock.smartCards.nearExpiryValue)} near-expiry value need stock controller review. Tie reorder decisions to chronic demand first.`,
-    [ReportType.STAFF_FOLLOW_UP]: `${data.followUps.filter(isOverdueFollowUp).length} follow-up tasks are overdue. Managers should review staff ownership, completion discipline, and message quality.`
+    [ReportType.STAFF_FOLLOW_UP]: `${data.followUps.filter(isOverdueFollowUp).length} follow-up tasks are overdue. Managers should review staff ownership, completion discipline, and message quality.`,
+    [ReportType.EVENT_PERFORMANCE]: `${data.events.length} events are visible in the event accountability layer. ${data.events.filter((event) => event.status === EventStatus.SUBMITTED).length} need approval, ${data.events.filter((event) => event.status === EventStatus.FUNDING_PENDING).length} need funding movement, and ${data.events.filter((event) => event.status === EventStatus.COMPLETED && !event.review).length} are awaiting review.`
   };
 
   return summaries[report.type];
@@ -198,6 +225,11 @@ export function getReportRecommendedActions(report: ReportData["reports"][number
       "Review overdue tasks by owner and branch.",
       "Check message quality for chronic and payment follow-ups.",
       "Use completion discipline as a branch manager coaching signal."
+    ],
+    [ReportType.EVENT_PERFORMANCE]: [
+      "Review submitted events and decide approval or rejection.",
+      "Release funding for approved events with dates approaching.",
+      "Clear overdue event checklist items and capture reviews for completed events."
     ]
   };
 
@@ -246,7 +278,21 @@ export function getStockControlPack(data: ReportData) {
 }
 
 export function buildReportDocuments(data: ReportData) {
-  return data.reports.map((report) => {
+  const reports = data.reports.some((report) => report.type === ReportType.EVENT_PERFORMANCE)
+    ? data.reports
+    : [
+        ...data.reports,
+        {
+          id: "event-performance-report",
+          type: ReportType.EVENT_PERFORMANCE,
+          title: "Event Performance Report",
+          description: "Event planning, approval, funding, readiness, outcomes, and historical promotion intelligence.",
+          lastGeneratedAt: new Date(),
+          keyMetric: `${data.events.length} events tracked`
+        }
+      ];
+
+  return reports.map((report) => {
     const status = getReportStatus(report, data);
     const keyMetric = getReportKeyMetric(report, data);
     const riskCount = status === "Action Required" ? 3 : status === "Needs Review" ? 2 : 0;
@@ -299,6 +345,11 @@ function getReportWhatChanged(report: ReportData["reports"][number], data: Repor
       `${data.followUps.filter((task) => task.status !== FollowUpStatus.DONE).length} staff actions remain open.`,
       `${data.followUps.filter(isOverdueFollowUp).length} follow-ups are overdue.`,
       `Managers can now use follow-up discipline as evidence, not anecdote.`
+    ],
+    [ReportType.EVENT_PERFORMANCE]: [
+      `${data.events.length} events are now part of the accountability pack.`,
+      `${data.events.filter((event) => event.status === EventStatus.SUBMITTED).length} event approval decisions are visible.`,
+      `${data.events.filter((event) => event.status === EventStatus.COMPLETED && event.review).length} completed events have review intelligence.`
     ]
   };
 
@@ -336,6 +387,11 @@ function getReportRisks(report: ReportData["reports"][number], data: ReportData)
       "Incomplete follow-ups create invisible revenue leakage.",
       "Unassigned tasks reduce accountability.",
       "Poor message quality can weaken patient trust."
+    ],
+    [ReportType.EVENT_PERFORMANCE]: [
+      "Events can consume budget without generating evidence if reviews are missed.",
+      "Late funding or overdue checklists can weaken attendance and lead capture.",
+      "Unassigned owners make event execution dependent on informal follow-up."
     ]
   };
 
@@ -350,7 +406,8 @@ function getReportManagerNotes(report: ReportData["reports"][number], data: Repo
     [ReportType.CHRONIC_RETENTION]: "Do not treat chronic follow-up as admin. It is recurring revenue protection and patient care discipline.",
     [ReportType.ONLINE_SALES]: "Online orders need hourly movement. Quote, payment, packing, and dispatch should each have a named owner.",
     [ReportType.STOCK_RISK]: "Stock review should connect to patient demand. Reorder and transfer decisions should protect chronic availability first.",
-    [ReportType.STAFF_FOLLOW_UP]: "Managers should review overdue tasks by staff member and branch before closing the day."
+    [ReportType.STAFF_FOLLOW_UP]: "Managers should review overdue tasks by staff member and branch before closing the day.",
+    [ReportType.EVENT_PERFORMANCE]: "Use this report before approving new activations. Confirm readiness, funding, owner, and post-event review discipline."
   };
 
   return notes[report.type];

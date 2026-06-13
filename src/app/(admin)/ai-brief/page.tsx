@@ -37,6 +37,7 @@ import {
   getAccountabilityRisks
 } from "@/lib/accountability-intelligence";
 import { getEscalationAiSummary, getNotificationSummary } from "@/lib/notifications";
+import { getEventFundingSummary, getEventReadinessSummary } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +68,10 @@ export default async function AiBriefPage() {
   const accountability = getAccountabilityMetrics(briefData.operationalActions);
   const accountabilityRisks = getAccountabilityRisks(briefData.operationalActions);
   const notificationSummary = getNotificationSummary(briefData.notifications);
+  const nextEvent = briefData.events.find((event) => event.startDate >= new Date() && event.status !== "CANCELLED" && event.status !== "COMPLETED");
+  const eventReadiness = nextEvent ? getEventReadinessSummary(nextEvent) : null;
+  const eventFunding = nextEvent ? getEventFundingSummary(nextEvent) : null;
+  const overdueEventItems = briefData.events.flatMap((event) => event.checklistItems).filter((item) => item.dueDate && item.dueDate < new Date() && item.status !== "COMPLETED" && item.status !== "NOT_REQUIRED");
   const ordersNeedingAction = revenue.delayedOrders.length + briefData.orders.filter((order) => order.status === "PHARMACIST_REVIEW" || order.status === "AWAITING_PAYMENT" || order.status === "QUOTED").length;
   const branchesNeedingAttention = briefData.branches.filter((branch) => branch.health === "Watch" || branch.health === "Critical").length;
   const followUpsDueToday = briefData.followUps.filter((task) => {
@@ -141,6 +146,32 @@ export default async function AiBriefPage() {
             <MiniMetric label="High-value orders" value={String(revenue.highValueOrders.length)} />
           </div>
           <p className="mt-4 rounded-lg bg-clinical-50 p-4 text-sm leading-6 text-clinical-900">{revenue.explanation}</p>
+        </Panel>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[1.08fr_0.92fr]">
+        <AiBriefCard title="Event Brief" variant="executive" action={nextEvent ? eventReadiness?.nextBestAction : "Create the next pharmacy activation in Event Command."}>
+          <p>
+            {nextEvent && eventReadiness && eventFunding
+              ? `${nextEvent.title} begins in ${eventReadiness.daysUntilStart} days and is ${eventReadiness.score}% ready. Funding risk is ${eventFunding.risk.toLowerCase()}, ${overdueEventItems.length} event checklist items are overdue, and the owner is ${nextEvent.ownerStaff?.name ?? "not assigned"}. ${eventReadiness.nextBestAction}`
+              : "No upcoming event is currently driving execution pressure. Use Event Command to plan the next outreach, branch promotion, supplier activation, or wellness day."}
+          </p>
+          <div className="mt-4">
+            <Link href="/events" className="focus-ring inline-flex rounded-lg bg-white px-3 py-2 text-xs font-semibold text-navy-950 ring-1 ring-slate-200 transition hover:bg-clinical-50">
+              Open Event Command
+            </Link>
+          </div>
+        </AiBriefCard>
+
+        <Panel title="Event Execution Signals" eyebrow="Calendar and funding discipline">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MiniMetric label="Next event" value={nextEvent?.title ?? "None planned"} />
+            <MiniMetric label="Readiness" value={eventReadiness ? `${eventReadiness.score}%` : "No event"} tone={eventReadiness && eventReadiness.riskLevel !== "Low" ? "warn" : "normal"} />
+            <MiniMetric label="Funding gap" value={eventFunding ? formatCurrency(eventFunding.fundingGap) : "$0"} tone={eventFunding && eventFunding.fundingGap > 0 ? "warn" : "normal"} />
+            <MiniMetric label="Overdue prep" value={String(overdueEventItems.length)} tone={overdueEventItems.length > 0 ? "risk" : "normal"} />
+            <MiniMetric label="Budget risk" value={eventFunding?.risk ?? "Low"} tone={eventFunding && eventFunding.risk !== "Low" ? "warn" : "normal"} />
+            <MiniMetric label="Owner" value={nextEvent?.ownerStaff?.name ?? "Unassigned"} tone={nextEvent && !nextEvent.ownerStaff ? "risk" : "normal"} />
+          </div>
         </Panel>
       </section>
 

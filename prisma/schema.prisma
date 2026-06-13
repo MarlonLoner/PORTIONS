@@ -100,6 +100,7 @@ enum ReportType {
   ONLINE_SALES
   STOCK_RISK
   STAFF_FOLLOW_UP
+  EVENT_PERFORMANCE
 }
 
 enum PilotRequestStatus {
@@ -166,6 +167,16 @@ enum NotificationType {
   STOCK_RISK
   BRANCH_ESCALATION
   PILOT_REVIEW
+  EVENT_APPROVAL_REQUIRED
+  EVENT_FUNDING_REQUIRED
+  EVENT_CHECKLIST_DUE
+  EVENT_CHECKLIST_OVERDUE
+  EVENT_CHECKLIST_BLOCKED
+  EVENT_READINESS_RISK
+  EVENT_STARTING_SOON
+  EVENT_REVIEW_DUE
+  EVENT_BUDGET_RISK
+  EVENT_OWNER_UNASSIGNED
   MANAGEMENT_ALERT
   GENERAL
 }
@@ -538,6 +549,7 @@ model OperationalAction {
   updatedAt       DateTime                   @updatedAt
   activities      OperationalActionActivity[]
   notifications   Notification[]
+  eventChecklistItem EventChecklistItem?
 
   @@index([status, dueDate])
   @@index([priority, status])
@@ -649,6 +661,8 @@ model EventChecklistItem {
   description     String?
   assignedStaffId String?
   assignedStaff   StaffMember?         @relation(fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  operationalActionId String?          @unique
+  operationalAction   OperationalAction? @relation(fields: [operationalActionId], references: [id], onDelete: SetNull)
   dueDate         DateTime?
   status          EventChecklistStatus @default(PENDING)
   completedAt     DateTime?
@@ -658,6 +672,7 @@ model EventChecklistItem {
 
   @@index([eventId, status])
   @@index([assignedStaffId])
+  @@index([operationalActionId])
 }
 
 model EventExpense {
