@@ -141,6 +141,61 @@ enum OperationalActionOutcome {
   OTHER
 }
 
+enum NotificationType {
+  ACTION_DUE
+  ACTION_OVERDUE
+  ACTION_BLOCKED
+  ACTION_UNASSIGNED
+  CRITICAL_ACTION
+  ORDER_PAYMENT_RISK
+  CHRONIC_REFILL_RISK
+  STOCK_RISK
+  BRANCH_ESCALATION
+  PILOT_REVIEW
+  MANAGEMENT_ALERT
+  GENERAL
+}
+
+enum NotificationSeverity {
+  INFO
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ACKNOWLEDGED
+  RESOLVED
+  DISMISSED
+}
+
+enum NotificationRecipientType {
+  STAFF
+  BRANCH_MANAGER
+  MANAGEMENT
+  OWNER
+  ROLE
+  GENERAL
+}
+
+enum NotificationDeliveryChannel {
+  IN_APP
+  EMAIL_READY
+  WHATSAPP_READY
+  SMS_READY
+}
+
+enum NotificationDeliveryStatus {
+  NOT_REQUIRED
+  PENDING
+  READY
+  SENT
+  FAILED
+}
+
 model Branch {
   id                 String         @id @default(cuid())
   name               String         @unique
@@ -157,6 +212,7 @@ model Branch {
   orders             Order[]
   stockItems         StockItem[]
   operationalActions OperationalAction[]
+  notifications      Notification[]
 }
 
 model StaffMember {
@@ -174,6 +230,7 @@ model StaffMember {
   orders        Order[]
   refillEvents  RefillEvent[]
   operationalActions OperationalAction[]
+  notifications Notification[]
 }
 
 model Patient {
@@ -383,12 +440,48 @@ model OperationalAction {
   createdAt       DateTime                   @default(now())
   updatedAt       DateTime                   @updatedAt
   activities      OperationalActionActivity[]
+  notifications   Notification[]
 
   @@index([status, dueDate])
   @@index([priority, status])
   @@index([category])
   @@index([branchId])
   @@index([assignedStaffId])
+}
+
+model Notification {
+  id                 String                      @id @default(cuid())
+  type               NotificationType
+  severity           NotificationSeverity        @default(INFO)
+  status             NotificationStatus          @default(UNREAD)
+  title              String
+  message            String
+  recipientType      NotificationRecipientType   @default(GENERAL)
+  recipientStaffId   String?
+  recipientStaff     StaffMember?                @relation(fields: [recipientStaffId], references: [id], onDelete: SetNull)
+  recipientRole      String?
+  branchId           String?
+  branch             Branch?                     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  sourceType         String?
+  sourceId           String?
+  actionId           String?
+  action             OperationalAction?          @relation(fields: [actionId], references: [id], onDelete: SetNull)
+  scheduledFor       DateTime?
+  triggeredAt        DateTime?
+  readAt             DateTime?
+  acknowledgedAt     DateTime?
+  resolvedAt         DateTime?
+  deliveryChannel    NotificationDeliveryChannel @default(IN_APP)
+  deliveryStatus     NotificationDeliveryStatus  @default(NOT_REQUIRED)
+  metadata           Json?
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  @@index([status, severity])
+  @@index([type, actionId, status])
+  @@index([branchId])
+  @@index([recipientStaffId])
+  @@index([createdAt])
 }
 
 model OperationalActionActivity {

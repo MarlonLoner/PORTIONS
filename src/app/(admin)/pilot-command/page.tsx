@@ -47,6 +47,7 @@ import {
   type PilotRiskSeverity,
   type PilotStatus
 } from "@/lib/pilot-command";
+import { getEscalationAiSummary, getNotificationSummary } from "@/lib/notifications";
 
 const statusClasses: Record<PilotStatus, string> = {
   Setup: "bg-amber-50 text-amber-700 ring-amber-200",
@@ -89,6 +90,7 @@ export default async function PilotCommandPage() {
   const staffExecutionChart = toStaffChartData(data.operationalActions);
   const outcomeChart = getOutcomeBreakdown(data.operationalActions);
   const openCompletedChart = getOpenVsCompletedChartData(data.operationalActions);
+  const notificationSummary = getNotificationSummary(data.notifications);
 
   return (
     <div className="space-y-6">
@@ -154,6 +156,22 @@ export default async function PilotCommandPage() {
           <Kpi title="Revenue protected" value={formatCurrency(execution.valueProtected)} icon={<ShieldCheck className="h-5 w-5" />} tone="emerald" />
         </div>
         <p className="mt-5 rounded-lg bg-navy-950 p-4 text-sm font-semibold leading-7 text-white">{getAccountabilityAiSummary(data.operationalActions)}</p>
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
+        <SectionHeader eyebrow="Notification discipline" title="Are escalations being seen and cleared?" icon={<AlertTriangle className="h-5 w-5" />} />
+        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Kpi title="Alerts generated" value={String(notificationSummary.total)} icon={<AlertTriangle className="h-5 w-5" />} />
+          <Kpi title="Unresolved critical" value={String(notificationSummary.critical)} icon={<ShieldCheck className="h-5 w-5" />} tone={notificationSummary.critical > 0 ? "rose" : "emerald"} />
+          <Kpi title="Acknowledged" value={String(notificationSummary.acknowledged)} icon={<CheckCircle2 className="h-5 w-5" />} tone="emerald" />
+          <Kpi title="Branch escalations" value={String(notificationSummary.managementEscalations)} icon={<Flag className="h-5 w-5" />} tone={notificationSummary.managementEscalations > 0 ? "amber" : "white"} />
+        </div>
+        <p className="mt-5 rounded-lg bg-clinical-50 p-4 text-sm font-semibold leading-7 text-clinical-900">{getEscalationAiSummary(data.notifications)}</p>
+        <div className="mt-4">
+          <Link href="/notifications" className="focus-ring inline-flex items-center rounded-lg bg-navy-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-navy-800">
+            Review Notifications
+          </Link>
+        </div>
       </section>
 
       <section className="grid gap-5 xl:grid-cols-2">

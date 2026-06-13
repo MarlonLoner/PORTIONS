@@ -1,6 +1,12 @@
 import {
   FollowUpStatus,
   FollowUpType,
+  NotificationDeliveryChannel,
+  NotificationDeliveryStatus,
+  NotificationRecipientType,
+  NotificationSeverity,
+  NotificationStatus,
+  NotificationType,
   OperationalActionCategory,
   OperationalActionOutcome,
   OperationalActionPriority,
@@ -171,6 +177,7 @@ const stockProducts = [
 ];
 
 async function main() {
+  await prisma.notification.deleteMany();
   await prisma.operationalActionActivity.deleteMany();
   await prisma.operationalAction.deleteMany();
   await prisma.report.deleteMany();
@@ -503,6 +510,8 @@ async function main() {
     }
   ];
 
+  const seededActions: Awaited<ReturnType<typeof prisma.operationalAction.create>>[] = [];
+
   for (const action of actionSeeds) {
     const branch = branches.get(action.branchName);
     const staff = staffMap.get(action.staffName);
@@ -539,6 +548,7 @@ async function main() {
         }
       }
     });
+    seededActions.push(created);
 
     if (created.status !== OperationalActionStatus.COMPLETED && staff) {
       await prisma.operationalActionActivity.create({
@@ -551,6 +561,107 @@ async function main() {
       });
     }
   }
+
+  const openActions = seededActions.filter((action) => action.status !== OperationalActionStatus.COMPLETED && action.status !== OperationalActionStatus.CANCELLED);
+  const criticalAction = openActions.find((action) => action.priority === OperationalActionPriority.CRITICAL);
+  const blockedAction = openActions.find((action) => action.status === OperationalActionStatus.BLOCKED);
+  const overdueAction = openActions.find((action) => action.dueDate && action.dueDate < today);
+  const dueTodayAction = openActions.find((action) => action.dueDate && action.dueDate.toDateString() === today.toDateString());
+
+  await prisma.notification.createMany({
+    data: [
+      ...(criticalAction ? [{
+        type: NotificationType.CRITICAL_ACTION,
+        severity: NotificationSeverity.CRITICAL,
+        status: NotificationStatus.UNREAD,
+        title: `Critical action requires attention: ${criticalAction.title}`,
+        message: `Critical action: '${criticalAction.title}' requires management attention now. Assign, start, or resolve before close.`,
+        recipientType: NotificationRecipientType.MANAGEMENT,
+        recipientRole: "General Manager",
+        branchId: criticalAction.branchId,
+        sourceType: "OPERATIONAL_ACTION",
+        sourceId: criticalAction.id,
+        actionId: criticalAction.id,
+        scheduledFor: criticalAction.dueDate,
+        triggeredAt: today,
+        deliveryChannel: NotificationDeliveryChannel.IN_APP,
+        deliveryStatus: NotificationDeliveryStatus.NOT_REQUIRED,
+        metadata: { seed: true, reason: "critical action" }
+      }] : []),
+      ...(dueTodayAction ? [{
+        type: NotificationType.ACTION_DUE,
+        severity: NotificationSeverity.MEDIUM,
+        status: NotificationStatus.UNREAD,
+        title: `Action due today: ${dueTodayAction.title}`,
+        message: `The action '${dueTodayAction.title}' is due today. Confirm ownership and update PORTIONS before close.`,
+        recipientType: dueTodayAction.assignedStaffId ? NotificationRecipientType.STAFF : NotificationRecipientType.BRANCH_MANAGER,
+        recipientStaffId: dueTodayAction.assignedStaffId,
+        recipientRole: dueTodayAction.assignedStaffId ? null : "Branch Manager",
+        branchId: dueTodayAction.branchId,
+        sourceType: "OPERATIONAL_ACTION",
+        sourceId: dueTodayAction.id,
+        actionId: dueTodayAction.id,
+        scheduledFor: dueTodayAction.dueDate,
+        triggeredAt: today,
+        deliveryChannel: NotificationDeliveryChannel.IN_APP,
+        deliveryStatus: NotificationDeliveryStatus.NOT_REQUIRED,
+        metadata: { seed: true, reason: "due today" }
+      }] : []),
+      ...(overdueAction ? [{
+        type: NotificationType.ACTION_OVERDUE,
+        severity: NotificationSeverity.HIGH,
+        status: NotificationStatus.ACKNOWLEDGED,
+        title: `Overdue action: ${overdueAction.title}`,
+        message: `Action overdue: '${overdueAction.title}' was due earlier and needs a status update or manager escalation.`,
+        recipientType: NotificationRecipientType.BRANCH_MANAGER,
+        recipientRole: "Branch Manager",
+        branchId: overdueAction.branchId,
+        sourceType: "OPERATIONAL_ACTION",
+        sourceId: overdueAction.id,
+        actionId: overdueAction.id,
+        scheduledFor: overdueAction.dueDate,
+        triggeredAt: addDays(-1),
+        acknowledgedAt: today,
+        deliveryChannel: NotificationDeliveryChannel.WHATSAPP_READY,
+        deliveryStatus: NotificationDeliveryStatus.READY,
+        metadata: { seed: true, reason: "overdue action" }
+      }] : []),
+      ...(blockedAction ? [{
+        type: NotificationType.ACTION_BLOCKED,
+        severity: NotificationSeverity.HIGH,
+        status: NotificationStatus.UNREAD,
+        title: `Blocked action: ${blockedAction.title}`,
+        message: `Blocked action: '${blockedAction.title}' needs escalation. Confirm the blocker and next decision owner.`,
+        recipientType: NotificationRecipientType.MANAGEMENT,
+        recipientRole: "Operations Manager",
+        branchId: blockedAction.branchId,
+        sourceType: "OPERATIONAL_ACTION",
+        sourceId: blockedAction.id,
+        actionId: blockedAction.id,
+        scheduledFor: blockedAction.dueDate,
+        triggeredAt: today,
+        deliveryChannel: NotificationDeliveryChannel.IN_APP,
+        deliveryStatus: NotificationDeliveryStatus.NOT_REQUIRED,
+        metadata: { seed: true, reason: "blocked action" }
+      }] : []),
+      {
+        type: NotificationType.PILOT_REVIEW,
+        severity: NotificationSeverity.INFO,
+        status: NotificationStatus.RESOLVED,
+        title: "Pilot review evidence ready",
+        message: "Pilot review reminder: confirm evidence, action completion, and unresolved escalation items before the next owner review.",
+        recipientType: NotificationRecipientType.OWNER,
+        recipientRole: "Owner",
+        sourceType: "PILOT_COMMAND",
+        sourceId: "pilot-command",
+        triggeredAt: addDays(-2),
+        resolvedAt: addDays(-1),
+        deliveryChannel: NotificationDeliveryChannel.IN_APP,
+        deliveryStatus: NotificationDeliveryStatus.NOT_REQUIRED,
+        metadata: { seed: true, reason: "pilot review" }
+      }
+    ]
+  });
 
   console.log("PORTIONS demo database seeded.");
 }

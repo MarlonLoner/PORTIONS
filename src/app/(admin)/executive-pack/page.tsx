@@ -28,6 +28,7 @@ import {
   getValueCreatedSummary
 } from "@/lib/executive-pack";
 import { formatCurrency } from "@/lib/format";
+import { getEscalationAiSummary, getNotificationSummary } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +57,7 @@ export default async function ExecutivePackPage() {
   const staffHighlight = staffExecution.find((staffMember) => staffMember.staff !== "Unassigned") ?? staffExecution[0];
   const openCompletedChart = getOpenVsCompletedChartData(data.operationalActions);
   const branchExecutionChart = toBranchChartData(data.operationalActions);
+  const notificationSummary = getNotificationSummary(data.notifications);
 
   return (
     <div className="executive-pack space-y-6">
@@ -148,6 +150,20 @@ export default async function ExecutivePackPage() {
           <HorizontalBarChart data={openCompletedChart} tone="emerald" />
           <HorizontalBarChart data={branchExecutionChart} valueType="percent" tone="navy" />
         </div>
+      </ReportSection>
+
+      <ReportSection title="Escalation Discipline" eyebrow="Management-visible alerts" icon={<AlertTriangle className="h-5 w-5" />}>
+        <MetricGrid>
+          <Metric label="Alerts generated" value={String(notificationSummary.total)} />
+          <Metric label="Unread alerts" value={String(notificationSummary.unread)} />
+          <Metric label="Critical unresolved" value={String(notificationSummary.critical)} />
+          <Metric label="Overdue escalations" value={String(notificationSummary.overdue)} />
+          <Metric label="Blocked escalations" value={String(notificationSummary.blocked)} />
+          <Metric label="Unassigned alerts" value={String(notificationSummary.unassigned)} />
+          <Metric label="Acknowledged" value={String(notificationSummary.acknowledged)} />
+          <Metric label="Resolved this week" value={String(notificationSummary.resolvedThisWeek)} />
+        </MetricGrid>
+        <Narrative label="Escalation narrative" value={getEscalationAiSummary(data.notifications)} />
       </ReportSection>
 
       <div className="grid gap-6 xl:grid-cols-3">

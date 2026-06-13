@@ -14,12 +14,18 @@ import {
   getExecutionAiSummary,
   getRecentActionActivity
 } from "@/lib/operational-actions";
+import { getEscalationAiSummary, getNotificationSummary, isClosedNotification } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
 export default async function ActionCenterPage() {
-  const { actions, branches, staff } = await getOperationalActionsData();
+  const { actions, branches, staff, notifications } = await getOperationalActionsData();
   const metrics = getActionCenterMetrics(actions);
+  const notificationSummary = getNotificationSummary(notifications);
+  const notificationCounts = new Map<string, number>();
+  notifications.filter((notification) => notification.actionId && !isClosedNotification(notification)).forEach((notification) => {
+    notificationCounts.set(notification.actionId!, (notificationCounts.get(notification.actionId!) ?? 0) + 1);
+  });
   const branchLoad = getActionsByBranch(actions.filter((action) => action.status !== "COMPLETED" && action.status !== "CANCELLED")).slice(0, 4);
   const staffLoad = getActionsByStaff(actions.filter((action) => action.status !== "COMPLETED" && action.status !== "CANCELLED")).slice(0, 4);
   const recentActivity = getRecentActionActivity(actions);
@@ -43,7 +49,8 @@ export default async function ActionCenterPage() {
     valueAmount: Number(action.valueAmount),
     createdAt: action.createdAt.toISOString(),
     urgency: getActionUrgency(action),
-    suggestedNextStep: getActionSuggestedNextStep(action)
+    suggestedNextStep: getActionSuggestedNextStep(action),
+    alertCount: notificationCounts.get(action.id) ?? 0
   }));
 
   return (
@@ -85,6 +92,23 @@ export default async function ActionCenterPage() {
         <StatCard title="Critical actions" value={String(metrics.criticalActions)} helper="Highest urgency queue" icon={<AlertTriangle className="h-5 w-5" />} tone={metrics.criticalActions > 0 ? "rose" : "emerald"} trend="Critical" />
       </section>
 
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="section-title">Notifications & Escalations</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy-950">Which actions are now management-visible?</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{getEscalationAiSummary(notifications)}</p>
+          </div>
+          <Link href="/notifications" className="focus-ring rounded-lg bg-navy-950 px-4 py-2.5 text-sm font-semibold text-white">Open Notifications</Link>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <SignalBox label="Unread alerts" value={String(notificationSummary.unread)} />
+          <SignalBox label="Critical alerts" value={String(notificationSummary.critical)} tone={notificationSummary.critical > 0 ? "risk" : "normal"} />
+          <SignalBox label="Overdue alerts" value={String(notificationSummary.overdue)} tone={notificationSummary.overdue > 0 ? "risk" : "normal"} />
+          <SignalBox label="Resolved this week" value={String(notificationSummary.resolvedThisWeek)} tone="success" />
+        </div>
+      </section>
+
       <section className="grid gap-5 xl:grid-cols-3">
         <SignalPanel title="Branch workload" items={branchLoad.map((item) => `${item.name}: ${item.count} open`)} />
         <SignalPanel title="Staff workload" items={staffLoad.map((item) => `${item.name}: ${item.count} assigned`)} />
@@ -111,5 +135,21 @@ function SignalPanel({ title, items }: { title: string; items: string[] }) {
         )) : <p className="rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-600 ring-1 ring-slate-200">No signal yet. Create or complete actions to build accountability history.</p>}
       </div>
     </section>
+  );
+}
+
+function SignalBox({ label, value, tone = "normal" }: { label: string; value: string; tone?: "normal" | "risk" | "success" }) {
+  const className =
+    tone === "risk"
+      ? "rounded-lg border border-rose-100 bg-rose-50 p-3"
+      : tone === "success"
+        ? "rounded-lg border border-emerald-100 bg-emerald-50 p-3"
+        : "rounded-lg border border-slate-100 bg-slate-50 p-3";
+
+  return (
+    <div className={className}>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-navy-950">{value}</p>
+    </div>
   );
 }

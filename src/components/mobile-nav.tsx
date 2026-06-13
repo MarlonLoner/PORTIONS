@@ -3,6 +3,7 @@
 import clsx from "clsx";
 import {
   BarChart3,
+  BellRing,
   Bot,
   Building2,
   ClipboardCheck,
@@ -28,6 +29,7 @@ const navItems = [
   { href: "/patients", label: "Patients", icon: UsersRound },
   { href: "/follow-ups", label: "Follow-Ups", icon: ClipboardList },
   { href: "/action-center", label: "Actions", icon: ClipboardCheck },
+  { href: "/notifications", label: "Alerts", icon: BellRing },
   { href: "/orders", label: "Orders", icon: ShoppingBag },
   { href: "/branches", label: "Branches", icon: Building2 },
   { href: "/stock", label: "Stock", icon: PackageSearch },

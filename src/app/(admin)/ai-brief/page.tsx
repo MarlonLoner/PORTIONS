@@ -36,6 +36,7 @@ import {
   getAccountabilityMetrics,
   getAccountabilityRisks
 } from "@/lib/accountability-intelligence";
+import { getEscalationAiSummary, getNotificationSummary } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,7 @@ export default async function AiBriefPage() {
   const checklist = getDailyCommandChecklist(intelligence);
   const accountability = getAccountabilityMetrics(briefData.operationalActions);
   const accountabilityRisks = getAccountabilityRisks(briefData.operationalActions);
+  const notificationSummary = getNotificationSummary(briefData.notifications);
   const ordersNeedingAction = revenue.delayedOrders.length + briefData.orders.filter((order) => order.status === "PHARMACIST_REVIEW" || order.status === "AWAITING_PAYMENT" || order.status === "QUOTED").length;
   const branchesNeedingAttention = briefData.branches.filter((branch) => branch.health === "Watch" || branch.health === "Critical").length;
   const followUpsDueToday = briefData.followUps.filter((task) => {
@@ -162,6 +164,30 @@ export default async function AiBriefPage() {
             <MiniMetric label="Largest staff queue" value={accountabilityRisks.staffWithLargestAssignedWorkload?.staff ?? "None"} />
             <MiniMetric label="Value recovered" value={formatCurrency(accountability.valueRecovered)} />
             <MiniMetric label="Value protected" value={formatCurrency(accountability.valueProtected)} />
+          </div>
+        </Panel>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[1.08fr_0.92fr]">
+        <AiBriefCard title="Escalation Brief" variant="executive" action={notificationSummary.critical > 0 ? "Resolve critical alerts before routine branch updates." : "Acknowledge due alerts and keep branch managers aligned before close."}>
+          <p>{getEscalationAiSummary(briefData.notifications)}</p>
+          <div className="mt-4">
+            <Link href="/notifications" className="focus-ring inline-flex rounded-lg bg-white px-3 py-2 text-xs font-semibold text-navy-950 ring-1 ring-slate-200 transition hover:bg-clinical-50">
+              Open Notifications
+            </Link>
+          </div>
+        </AiBriefCard>
+
+        <Panel title="Escalation Signals" eyebrow="Alert discipline">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MiniMetric label="Unread alerts" value={String(notificationSummary.unread)} tone={notificationSummary.unread > 0 ? "warn" : "normal"} />
+            <MiniMetric label="Critical alerts" value={String(notificationSummary.critical)} tone={notificationSummary.critical > 0 ? "risk" : "normal"} />
+            <MiniMetric label="Due today" value={String(notificationSummary.dueToday)} tone={notificationSummary.dueToday > 0 ? "warn" : "normal"} />
+            <MiniMetric label="Overdue alerts" value={String(notificationSummary.overdue)} tone={notificationSummary.overdue > 0 ? "risk" : "normal"} />
+            <MiniMetric label="Blocked alerts" value={String(notificationSummary.blocked)} tone={notificationSummary.blocked > 0 ? "warn" : "normal"} />
+            <MiniMetric label="Unassigned alerts" value={String(notificationSummary.unassigned)} tone={notificationSummary.unassigned > 0 ? "risk" : "normal"} />
+            <MiniMetric label="Acknowledged" value={String(notificationSummary.acknowledged)} />
+            <MiniMetric label="Resolved this week" value={String(notificationSummary.resolvedThisWeek)} />
           </div>
         </Panel>
       </section>

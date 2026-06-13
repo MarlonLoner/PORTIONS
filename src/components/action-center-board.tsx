@@ -26,6 +26,7 @@ export type ActionCenterRecord = {
   createdAt: string;
   urgency: string;
   suggestedNextStep: string;
+  alertCount?: number;
 };
 
 export type ActionOption = {
@@ -201,7 +202,8 @@ function toRecord(action: any): ActionCenterRecord {
     valueAmount: Number(action.valueAmount),
     createdAt: action.createdAt,
     urgency: getClientUrgency(action),
-    suggestedNextStep: getClientSuggestion(action)
+    suggestedNextStep: getClientSuggestion(action),
+    alertCount: action.alertCount ?? 0
   };
 }
 
@@ -289,6 +291,7 @@ function ActionCard({ action, busy, staff, onUpdate }: { action: ActionCenterRec
           <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-600">{action.description}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {action.alertCount ? <Badge label={`${action.alertCount} active alerts`} className="bg-rose-50 text-rose-700 ring-rose-200" /> : null}
           <Badge label={enumLabel(action.category)} className="bg-white text-slate-700 ring-slate-200" />
           <Badge label={enumLabel(action.priority)} className={priorityClasses[action.priority]} />
           <Badge label={enumLabel(action.status)} className={statusClasses[action.status]} />

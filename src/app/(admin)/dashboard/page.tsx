@@ -28,6 +28,7 @@ import {
   getBranchExecutionRanking,
   getStaffExecutionRanking
 } from "@/lib/accountability-intelligence";
+import { getEscalationAiSummary, getNotificationSummary } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,7 @@ export default async function DashboardPage() {
   const topBranchExecution = getBranchExecutionRanking(data.operationalActions).find((branch) => branch.total >= 2) ?? getBranchExecutionRanking(data.operationalActions)[0];
   const branchNeedingExecution = [...getBranchExecutionRanking(data.operationalActions)].sort((a, b) => b.overdue + b.blocked - (a.overdue + a.blocked))[0];
   const topStaffExecutor = getStaffExecutionRanking(data.operationalActions).find((staff) => staff.staff !== "Unassigned");
+  const notificationSummary = getNotificationSummary(data.notifications);
 
   return (
     <div className="space-y-6">
@@ -122,6 +124,23 @@ export default async function DashboardPage() {
         <StatCard title="Overdue refill patients" value={String(data.overdueRefillPatients)} helper="Retention risk requiring follow-up" icon={<AlertTriangle className="h-5 w-5" />} tone="rose" trend="Risk" />
         <StatCard title="Pharmacist reviews" value={String(data.pendingPharmacistReviews)} helper="Orders waiting for clinical review" icon={<ClipboardCheck className="h-5 w-5" />} tone="amber" trend="Clinical" />
         <StatCard title="Active stock alerts" value={String(data.stockAlertCount)} helper="Low, expiry, dead, and overstock issues" icon={<PackageCheck className="h-5 w-5" />} trend="Stock" />
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="section-title">Notifications & Escalations</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy-950">What needs attention before the next call?</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{getEscalationAiSummary(data.notifications)}</p>
+          </div>
+          <Link href="/notifications" className="focus-ring rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white">Open Notifications</Link>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <MiniExecMetric label="Unread alerts" value={String(notificationSummary.unread)} tone={notificationSummary.unread > 0 ? "warn" : "normal"} />
+          <MiniExecMetric label="Critical alerts" value={String(notificationSummary.critical)} tone={notificationSummary.critical > 0 ? "risk" : "normal"} />
+          <MiniExecMetric label="Overdue escalations" value={String(notificationSummary.overdue)} tone={notificationSummary.overdue > 0 ? "risk" : "normal"} />
+          <MiniExecMetric label="Resolved this week" value={String(notificationSummary.resolvedThisWeek)} tone="success" />
+        </div>
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
