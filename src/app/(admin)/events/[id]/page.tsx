@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
 import { ArrowLeft, CalendarClock, CheckCircle2, ClipboardCheck, History, Megaphone, WalletCards } from "lucide-react";
 import Link from "next/link";
+import { EventChecklistAssignment } from "@/components/event-checklist-assignment";
 import { StatusBadge } from "@/components/status-badge";
 import {
-  assignEventChecklistItem,
   createLinkedChecklistAction,
   createEventExpense,
   getEventAssignmentReason,
@@ -57,23 +57,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
     const itemId = String(formData.get("itemId"));
     const status = String(formData.get("status")) as EventChecklistStatus;
     await updateChecklistItem(itemId, id, status);
-  }
-
-  async function checklistAssignAction(formData: FormData) {
-    "use server";
-    await assignEventChecklistItem(String(formData.get("itemId")), id, String(formData.get("assignedStaffId") || "") || null);
-  }
-
-  async function checklistAssignRecommendedAction(formData: FormData) {
-    "use server";
-    const item = await getEventById(id);
-    if (!item) return;
-    const checklistItem = item.checklistItems.find((entry) => entry.id === String(formData.get("itemId")));
-    if (!checklistItem) return;
-    const data = await getEventCommandData();
-    const actions = data.allEvents.flatMap((entry) => entry.checklistItems.map((checklist) => checklist.operationalAction).filter(Boolean)).map((action) => ({ assignedStaffId: action!.assignedStaffId, status: action!.status, dueDate: action!.dueDate }));
-    const recommended = getEventChecklistRecommendedAssignee(item, checklistItem, data.staff, actions);
-    await assignEventChecklistItem(checklistItem.id, id, recommended?.id ?? null);
   }
 
   async function checklistCreateAction(formData: FormData) {
@@ -194,31 +177,25 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
                   <StatusBadge status={item.status} />
                 </div>
                 <div className="mt-3 rounded-lg bg-white p-3 ring-1 ring-slate-200">
-                  <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Recommended owner</p>
-                  <p className="mt-1 text-sm font-semibold text-navy-950">{recommended?.name ?? "No compatible staff configured"}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-600">{getEventAssignmentReason(event, item, recommended, openActions)}</p>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-                    <form action={checklistAssignAction} className="flex gap-2">
-                      <input type="hidden" name="itemId" value={item.id} />
-                      <select name="assignedStaffId" defaultValue={item.assignedStaffId ?? ""} className="focus-ring h-9 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-navy-950">
-                        <option value="">Unassigned</option>
-                        {compatibleStaff.map((member) => <option key={member.id} value={member.id}>{member.name}{member.role ? ` - ${member.role}` : ""}</option>)}
-                      </select>
-                      <button className="focus-ring rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">Assign</button>
-                    </form>
-                    <form action={checklistAssignRecommendedAction}>
-                      <input type="hidden" name="itemId" value={item.id} />
-                      <button disabled={!recommended} className="focus-ring rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Assign recommended</button>
-                    </form>
-                    {item.operationalAction ? (
-                      <Link href={`/action-center/${item.operationalAction.id}`} className="focus-ring rounded-lg bg-clinical-50 px-3 py-2 text-xs font-semibold text-clinical-800 ring-1 ring-clinical-100">Open linked action</Link>
-                    ) : (
+                  <EventChecklistAssignment
+                    item={{
+                      id: item.id,
+                      eventId: event.id,
+                      assignedStaffId: item.assignedStaffId,
+                      assignedStaffName: item.assignedStaff?.name ?? null,
+                      linkedActionId: item.operationalAction?.id ?? null
+                    }}
+                    staff={compatibleStaff.map((member) => ({ id: member.id, name: member.name, role: member.role, branchId: member.branchId }))}
+                    recommended={recommended ? { id: recommended.id, name: recommended.name, role: recommended.role, branchId: recommended.branchId } : null}
+                    recommendationReason={getEventAssignmentReason(event, item, recommended, openActions)}
+                    branchName={event.branch?.name ?? null}
+                  />
+                  {!item.operationalAction ? (
                       <form action={checklistCreateAction}>
                         <input type="hidden" name="itemId" value={item.id} />
-                        <button className="focus-ring rounded-lg bg-clinical-50 px-3 py-2 text-xs font-semibold text-clinical-800 ring-1 ring-clinical-100">Create linked action</button>
+                        <button className="focus-ring mt-3 rounded-lg bg-clinical-50 px-3 py-2 text-xs font-semibold text-clinical-800 ring-1 ring-clinical-100">Create linked action</button>
                       </form>
-                    )}
-                  </div>
+                    ) : null}
                 </div>
                 <form action={checklistAction} className="mt-3 flex flex-wrap gap-2">
                   <input type="hidden" name="itemId" value={item.id} />

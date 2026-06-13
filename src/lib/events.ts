@@ -227,31 +227,51 @@ export async function updateChecklistItem(itemId: string, eventId: string, statu
 }
 
 export async function assignEventChecklistItem(itemId: string, eventId: string, assignedStaffId: string | null) {
-  const item = await prisma.eventChecklistItem.findUnique({ where: { id: itemId }, include: { event: true } });
+  const item = await prisma.eventChecklistItem.findUnique({ where: { id: itemId }, include: { event: true, assignedStaff: true, operationalAction: { include: { assignedStaff: true, branch: true } } } });
   if (!item) throw new Error("Checklist item was not found.");
-  if (assignedStaffId) {
-    const staff = await prisma.staffMember.findUnique({ where: { id: assignedStaffId } });
+  if (item.eventId !== eventId) throw new Error("Checklist item does not belong to this event.");
+  const normalizedStaffId = normalizeAssignedStaffId(assignedStaffId);
+  if (normalizedStaffId === item.assignedStaffId) {
+    return getEventChecklistAssignment(itemId);
+  }
+  if (normalizedStaffId) {
+    const staff = await prisma.staffMember.findUnique({ where: { id: normalizedStaffId! } });
     if (!staff) throw new Error("Selected staff member was not found.");
-    if (item.event.branchId && staff.branchId && staff.branchId !== item.event.branchId) throw new Error("Assigned staff member belongs to another branch.");
+    if (item.event.branchId && staff.branchId !== item.event.branchId) throw new Error("Assigned staff member belongs to another branch.");
   }
 
-  await prisma.eventChecklistItem.update({
+  const updated = await prisma.eventChecklistItem.update({
     where: { id: itemId },
-    data: { assignedStaffId }
+    include: { assignedStaff: true, event: true, operationalAction: { include: { assignedStaff: true, branch: true } } },
+    data: { assignedStaffId: normalizedStaffId }
   });
   if (item.operationalActionId) {
     await prisma.operationalAction.update({
       where: { id: item.operationalActionId },
       data: {
-        assignedStaffId,
-        activities: { create: { activityType: "ASSIGNMENT_CHANGED", description: assignedStaffId ? "Event checklist assignment synchronized." : "Event checklist assignment cleared.", actorName: "PORTIONS" } }
+        assignedStaffId: normalizedStaffId,
+        activities: { create: { activityType: "ASSIGNMENT_CHANGED", description: assignmentDescription(item.assignedStaff?.name ?? null, updated.assignedStaff?.name ?? null), actorName: "PORTIONS" } }
       }
     });
   }
   await prisma.eventActivity.create({
-    data: { eventId, activityType: "CHECKLIST_ASSIGNED", description: assignedStaffId ? "Checklist owner assigned." : "Checklist owner cleared.", actorName: "PORTIONS" }
+    data: { eventId, activityType: "CHECKLIST_ASSIGNED", description: assignmentDescription(item.assignedStaff?.name ?? null, updated.assignedStaff?.name ?? null), actorName: "PORTIONS" }
   });
   revalidatePath(`/events/${eventId}`);
+  return getEventChecklistAssignment(itemId);
+}
+
+export async function getEventChecklistAssignment(itemId: string) {
+  const item = await prisma.eventChecklistItem.findUnique({
+    where: { id: itemId },
+    include: {
+      assignedStaff: true,
+      event: { include: { branch: true } },
+      operationalAction: { include: { assignedStaff: true, branch: true } }
+    }
+  });
+  if (!item) return null;
+  return serializeEventChecklistAssignment(item);
 }
 
 export async function createLinkedChecklistAction(itemId: string, eventId: string) {
@@ -632,7 +652,7 @@ type StaffForRecommendation = Prisma.StaffMemberGetPayload<{ include: { branch: 
 
 export function getEventChecklistCompatibleStaff(event: EventWithRelations, staff: StaffForRecommendation[]) {
   if (!event.branchId) return staff;
-  return staff.filter((member) => !member.branchId || member.branchId === event.branchId);
+  return staff.filter((member) => member.branchId === event.branchId);
 }
 
 export function getEventChecklistRecommendedAssignee(event: EventWithRelations, item: EventWithRelations["checklistItems"][number], staff: StaffForRecommendation[], openActions: Array<{ assignedStaffId: string | null; status: OperationalActionStatus; dueDate: Date | null }>) {
@@ -946,4 +966,44 @@ function enumOrDefault<T extends Record<string, string>>(value: FormDataEntryVal
 
 function sumMoney<T>(items: T[], selector: (item: T) => Prisma.Decimal | number | null | undefined) {
   return items.reduce((sum, item) => sum + Number(selector(item) ?? 0), 0);
+}
+
+function normalizeAssignedStaffId(value: string | null | undefined) {
+  const cleaned = (value ?? "").trim();
+  if (!cleaned || cleaned.toLowerCase() === "none" || cleaned.toLowerCase() === "unassigned") return null;
+  return cleaned;
+}
+
+function assignmentDescription(previousName: string | null, nextName: string | null) {
+  if (previousName && nextName) return `Reassigned from ${previousName} to ${nextName}.`;
+  if (nextName) return `Assigned to ${nextName}.`;
+  if (previousName) return `Assignment cleared from ${previousName}.`;
+  return "Assignment cleared.";
+}
+
+function serializeEventChecklistAssignment(item: Prisma.EventChecklistItemGetPayload<{
+  include: {
+    assignedStaff: true;
+    event: { include: { branch: true } };
+    operationalAction: { include: { assignedStaff: true; branch: true } };
+  };
+}>) {
+  return {
+    id: item.id,
+    eventId: item.eventId,
+    assignedStaffId: item.assignedStaffId,
+    assignedStaff: item.assignedStaff ? { id: item.assignedStaff.id, name: item.assignedStaff.name, role: item.assignedStaff.role, branchId: item.assignedStaff.branchId } : null,
+    event: {
+      id: item.event.id,
+      branchId: item.event.branchId,
+      branch: item.event.branch ? { id: item.event.branch.id, name: item.event.branch.name } : null
+    },
+    operationalAction: item.operationalAction
+      ? {
+          id: item.operationalAction.id,
+          assignedStaffId: item.operationalAction.assignedStaffId,
+          assignedStaff: item.operationalAction.assignedStaff ? { id: item.operationalAction.assignedStaff.id, name: item.operationalAction.assignedStaff.name, role: item.operationalAction.assignedStaff.role, branchId: item.operationalAction.assignedStaff.branchId } : null
+        }
+      : null
+  };
 }
