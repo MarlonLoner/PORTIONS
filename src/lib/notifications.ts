@@ -112,6 +112,123 @@ function normalizeSourceType(sourceType: string | null | undefined) {
   return (sourceType ?? "").trim().toUpperCase().replace(/-/g, "_");
 }
 
+type NotificationIdentityInput = {
+  type: NotificationType;
+  actionId?: string | null;
+  sourceType?: string | null;
+  sourceId?: string | null;
+  branchId?: string | null;
+};
+
+type ActiveNotification = Prisma.NotificationGetPayload<{
+  include: { branch: true; recipientStaff: true; action: { include: { branch: true; assignedStaff: true } } };
+}>;
+
+function deliveryChannelRank(channel: NotificationDeliveryChannel) {
+  if (channel === NotificationDeliveryChannel.WHATSAPP_READY) return 4;
+  if (channel === NotificationDeliveryChannel.EMAIL_READY) return 3;
+  if (channel === NotificationDeliveryChannel.SMS_READY) return 2;
+  return 1;
+}
+
+function deliveryStatusRank(status: NotificationDeliveryStatus) {
+  if (status === NotificationDeliveryStatus.SENT) return 5;
+  if (status === NotificationDeliveryStatus.READY) return 4;
+  if (status === NotificationDeliveryStatus.PENDING) return 3;
+  if (status === NotificationDeliveryStatus.FAILED) return 2;
+  return 1;
+}
+
+function activeStatusRank(status: NotificationStatus) {
+  if (status === NotificationStatus.ACKNOWLEDGED) return 3;
+  if (status === NotificationStatus.READ) return 2;
+  if (status === NotificationStatus.UNREAD) return 1;
+  return 0;
+}
+
+function toJsonObject(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, Prisma.JsonValue | Prisma.InputJsonValue> : {};
+}
+
+export function getNotificationDedupeKey(notification: NotificationIdentityInput) {
+  if (notification.type === NotificationType.BRANCH_ESCALATION) {
+    return `${notification.type}:branch:${notification.branchId ?? notification.sourceId ?? "network"}`;
+  }
+
+  if (notification.actionId) {
+    return `${notification.type}:action:${notification.actionId}`;
+  }
+
+  if (notification.sourceType && notification.sourceId) {
+    return `${notification.type}:source:${normalizeSourceType(notification.sourceType)}:${notification.sourceId}`;
+  }
+
+  if (notification.type === NotificationType.PILOT_REVIEW) {
+    return `${notification.type}:pilot:${notification.sourceType ?? "PILOT_COMMAND"}:${notification.sourceId ?? "pilot-review"}`;
+  }
+
+  return `${notification.type}:global`;
+}
+
+function activeDedupeWhere(identity: NotificationIdentityInput): Prisma.NotificationWhereInput {
+  if (identity.type === NotificationType.BRANCH_ESCALATION) {
+    return {
+      type: identity.type,
+      branchId: identity.branchId ?? identity.sourceId ?? undefined,
+      status: { in: unresolvedNotificationStatuses }
+    };
+  }
+
+  if (identity.actionId) {
+    return {
+      type: identity.type,
+      actionId: identity.actionId,
+      status: { in: unresolvedNotificationStatuses }
+    };
+  }
+
+  if (identity.sourceType && identity.sourceId) {
+    return {
+      type: identity.type,
+      sourceType: identity.sourceType,
+      sourceId: identity.sourceId,
+      status: { in: unresolvedNotificationStatuses }
+    };
+  }
+
+  return {
+    type: identity.type,
+    actionId: null,
+    sourceType: null,
+    sourceId: null,
+    branchId: identity.branchId ?? null,
+    status: { in: unresolvedNotificationStatuses }
+  };
+}
+
+export async function findExistingActiveNotification(identity: NotificationIdentityInput) {
+  return prisma.notification.findFirst({
+    where: activeDedupeWhere(identity),
+    orderBy: [{ status: "desc" }, { createdAt: "asc" }]
+  });
+}
+
+function chooseCanonicalNotification(notifications: ActiveNotification[]) {
+  return [...notifications].sort((a, b) => {
+    const statusDelta = activeStatusRank(b.status) - activeStatusRank(a.status);
+    if (statusDelta) return statusDelta;
+    return a.createdAt.getTime() - b.createdAt.getTime();
+  })[0];
+}
+
+function strongestDelivery(notifications: ActiveNotification[]) {
+  return [...notifications].sort((a, b) => {
+    const channelDelta = deliveryChannelRank(b.deliveryChannel) - deliveryChannelRank(a.deliveryChannel);
+    if (channelDelta) return channelDelta;
+    return deliveryStatusRank(b.deliveryStatus) - deliveryStatusRank(a.deliveryStatus);
+  })[0];
+}
+
 async function resolveNotificationIds(ids: string[], resolvedAt = new Date()) {
   const uniqueIds = Array.from(new Set(ids));
   if (!uniqueIds.length) return 0;
@@ -128,6 +245,31 @@ async function resolveNotificationIds(ids: string[], resolvedAt = new Date()) {
   });
 
   return result.count;
+}
+
+async function updateExistingNotificationFromCandidate(existing: { id: string; title: string; message: string; severity: NotificationSeverity; metadata: Prisma.JsonValue | null }, candidate: Prisma.NotificationCreateManyInput) {
+  const nextMetadata = {
+    ...toJsonObject(existing.metadata),
+    ...toJsonObject(candidate.metadata),
+    dedupeKey: getNotificationDedupeKey(candidate)
+  };
+
+  const data: Prisma.NotificationUpdateInput = {};
+  if (existing.title !== candidate.title) data.title = String(candidate.title);
+  if (existing.message !== candidate.message) data.message = String(candidate.message);
+  if (existing.severity !== candidate.severity) data.severity = candidate.severity;
+  if (JSON.stringify(toJsonObject(existing.metadata)) !== JSON.stringify(nextMetadata)) data.metadata = nextMetadata;
+
+  const changed = Object.keys(data).length > 0;
+
+  if (!changed) return false;
+
+  await prisma.notification.update({
+    where: { id: existing.id },
+    data
+  });
+
+  return true;
 }
 
 export async function resolveNotificationsForSource({
@@ -234,6 +376,69 @@ export async function reconcileNotifications() {
   }
 
   return resolveNotificationIds(staleIds);
+}
+
+export async function deduplicateActiveNotifications() {
+  const activeNotifications = await prisma.notification.findMany({
+    where: { status: { in: unresolvedNotificationStatuses } },
+    include: {
+      branch: true,
+      recipientStaff: true,
+      action: { include: { branch: true, assignedStaff: true } }
+    },
+    orderBy: { createdAt: "asc" }
+  });
+  const groups = new Map<string, ActiveNotification[]>();
+
+  for (const notification of activeNotifications) {
+    const key = getNotificationDedupeKey(notification);
+    groups.set(key, [...(groups.get(key) ?? []), notification]);
+  }
+
+  let duplicatesCleaned = 0;
+  const resolvedAt = new Date();
+
+  for (const [dedupeKey, group] of groups) {
+    if (group.length <= 1) continue;
+
+    const canonical = chooseCanonicalNotification(group);
+    const deliverySource = strongestDelivery(group);
+    const duplicateIds = group.filter((notification) => notification.id !== canonical.id).map((notification) => notification.id);
+    const mergedMetadata = group.reduce<Record<string, Prisma.JsonValue | Prisma.InputJsonValue>>((result, notification) => ({
+      ...result,
+      ...toJsonObject(notification.metadata)
+    }), {
+      dedupeKey,
+      duplicateCleanup: true,
+      duplicateCount: group.length - 1
+    });
+
+    await prisma.notification.update({
+      where: { id: canonical.id },
+      data: {
+        deliveryChannel: deliverySource.deliveryChannel,
+        deliveryStatus: deliverySource.deliveryStatus,
+        metadata: mergedMetadata
+      }
+    });
+
+    for (const id of duplicateIds) {
+      await prisma.notification.update({
+        where: { id },
+        data: {
+          status: NotificationStatus.RESOLVED,
+          resolvedAt,
+          metadata: {
+            ...mergedMetadata,
+            duplicateResolvedBy: canonical.id
+          }
+        }
+      });
+      duplicatesCleaned += 1;
+    }
+  }
+
+  return duplicatesCleaned;
 }
 
 export function getNotificationRecipient(action?: ActionForNotification | null, fallback: NotificationRecipientType = NotificationRecipientType.MANAGEMENT) {
@@ -364,31 +569,35 @@ export async function getEscalationCandidates() {
 
 export async function generateOperationalNotifications() {
   const automaticallyResolved = await reconcileNotifications();
+  const duplicatesCleaned = await deduplicateActiveNotifications();
   const candidates = await getEscalationCandidates();
   let created = 0;
+  let updated = 0;
   let skipped = 0;
 
   for (const candidate of candidates) {
-    const existing = await prisma.notification.findFirst({
-      where: {
-        type: candidate.type,
-        actionId: candidate.actionId ?? undefined,
-        sourceType: candidate.actionId ? undefined : candidate.sourceType ?? undefined,
-        sourceId: candidate.actionId ? undefined : candidate.sourceId ?? undefined,
-        status: { in: unresolvedNotificationStatuses }
-      }
-    });
+    const existing = await findExistingActiveNotification(candidate);
 
     if (existing) {
-      skipped += 1;
+      const changed = await updateExistingNotificationFromCandidate(existing, candidate);
+      if (changed) updated += 1;
+      else skipped += 1;
       continue;
     }
 
-    await prisma.notification.create({ data: candidate });
+    await prisma.notification.create({
+      data: {
+        ...candidate,
+        metadata: {
+          ...toJsonObject(candidate.metadata),
+          dedupeKey: getNotificationDedupeKey(candidate)
+        }
+      }
+    });
     created += 1;
   }
 
-  return { created, skipped, evaluated: candidates.length, automaticallyResolved };
+  return { created, updated, skipped, evaluated: candidates.length, automaticallyResolved, duplicatesCleaned };
 }
 
 export async function getNotificationInbox() {

@@ -83,7 +83,11 @@ export function NotificationsInbox({ initialNotifications }: { initialNotificati
     const inbox = await fetch("/api/notifications").then((res) => res.json());
     setNotifications(inbox.map(toRecord));
     setBusyId("");
-    setFeedback(`${result.created} new alerts created, ${result.skipped} already existed, and ${result.automaticallyResolved ?? 0} completed alerts were resolved.`);
+    if ((result.created ?? 0) + (result.updated ?? 0) + (result.skipped ?? 0) + (result.automaticallyResolved ?? 0) + (result.duplicatesCleaned ?? 0) === 0) {
+      setFeedback("Notifications are up to date. No duplicates found.");
+    } else {
+      setFeedback(`${result.created ?? 0} new alerts created, ${result.updated ?? 0} updated, ${result.skipped ?? 0} already existed, ${result.automaticallyResolved ?? 0} resolved, and ${result.duplicatesCleaned ?? 0} duplicates cleaned.`);
+    }
   }
 
   async function updateNotification(id: string, payload: Record<string, string>, message: string) {
@@ -167,7 +171,7 @@ export function NotificationsInbox({ initialNotifications }: { initialNotificati
           </div>
           <div className="mt-5 grid gap-4">
             {group.items.length ? group.items.map((item) => (
-              <NotificationCard key={`${group.title}-${item.id}`} notification={item} busy={busyId === item.id} onUpdate={updateNotification} onCopy={copyMessage} />
+              <NotificationCard key={item.id} notification={item} busy={busyId === item.id} onUpdate={updateNotification} onCopy={copyMessage} />
             )) : <p className="rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-600 ring-1 ring-slate-200">No notifications in this group.</p>}
           </div>
         </div>
