@@ -8,8 +8,10 @@ const statusClasses: Record<string, string> = {
   LOST: "bg-slate-100 text-slate-700 ring-slate-200",
   VIP: "bg-amber-50 text-amber-700 ring-amber-200",
   PENDING: "bg-amber-50 text-amber-700 ring-amber-200",
+  IN_PROGRESS: "bg-clinical-50 text-clinical-800 ring-clinical-200",
   DONE: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  SNOOZED: "bg-slate-100 text-slate-700 ring-slate-200"
+  SNOOZED: "bg-slate-100 text-slate-700 ring-slate-200",
+  CANCELLED: "bg-slate-100 text-slate-500 ring-slate-200"
 };
 
 export function StatusBadge({ status }: { status: string }) {

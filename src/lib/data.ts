@@ -224,7 +224,7 @@ export async function getPatientDetail(id: string) {
         orderBy: { refillDate: "desc" }
       },
       followUpTasks: {
-        include: { branch: true, assignedStaff: true },
+        include: { branch: true, assignedStaff: true, activities: { orderBy: { createdAt: "desc" } } },
         orderBy: { dueDate: "desc" }
       },
       orders: {
@@ -238,7 +238,7 @@ export async function getPatientDetail(id: string) {
 
 export async function getFollowUps() {
   return prisma.followUpTask.findMany({
-    where: { status: { in: [FollowUpStatus.PENDING, FollowUpStatus.SNOOZED] } },
+    where: { status: { in: [FollowUpStatus.PENDING, FollowUpStatus.IN_PROGRESS, FollowUpStatus.SNOOZED] } },
     include: {
       branch: true,
       patient: {
@@ -253,24 +253,30 @@ export async function getFollowUps() {
 }
 
 export async function getFollowUpQueueData() {
-  const tasks = await prisma.followUpTask.findMany({
-    include: {
-      branch: true,
-      patient: {
-        include: {
-          refillEvents: true
-        }
+  const [tasks, staff] = await Promise.all([
+    prisma.followUpTask.findMany({
+      include: {
+        branch: true,
+        patient: {
+          include: {
+            refillEvents: true,
+            assignedStaff: true
+          }
+        },
+        assignedStaff: true,
+        activities: { orderBy: { createdAt: "desc" } }
       },
-      assignedStaff: true
-    },
-    orderBy: [{ dueDate: "asc" }, { type: "asc" }]
-  });
+      orderBy: [{ dueDate: "asc" }, { type: "asc" }]
+    }),
+    prisma.staffMember.findMany({ include: { branch: true }, orderBy: { name: "asc" } })
+  ]);
 
   const weekStart = startOfToday();
   weekStart.setDate(weekStart.getDate() - weekStart.getDay());
 
   return {
-    tasks: tasks.filter((task) => task.status !== FollowUpStatus.DONE),
+    tasks,
+    staff,
     allTasks: tasks,
     completedThisWeek: tasks.filter((task) => task.status === FollowUpStatus.DONE && task.updatedAt >= weekStart).length
   };

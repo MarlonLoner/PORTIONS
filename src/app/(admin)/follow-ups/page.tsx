@@ -6,31 +6,32 @@ import {
   MessageSquareReply,
   ShieldAlert
 } from "lucide-react";
+import Link from "next/link";
 import { FollowUpTaskCard } from "@/components/follow-up-task-card";
 import { StatCard } from "@/components/stat-card";
 import { estimateMonthlyPatientValue } from "@/lib/chronic";
-import { daysFromNow, enumLabel, formatCurrency } from "@/lib/format";
-import { followUpTypeOptions, getFollowUpQueueData } from "@/lib/data";
+import { daysFromNow, formatCurrency } from "@/lib/format";
+import { getFollowUpQueueData } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
-const groupCopy: Record<string, string> = {
-  DUE_TODAY: "Convert due refills before patients drift into overdue status.",
-  OVERDUE: "Recover missed chronic revenue and protect medication adherence.",
-  PRESCRIPTION_RENEWAL_NEEDED: "Remove prescription blockers before the next refill cycle.",
-  PAYMENT_PENDING: "Turn prepared orders into collected revenue.",
-  DELIVERY_CONFIRMATION: "Confirm delivery details before dispatch friction appears.",
-  LOST_PATIENT_REVIVAL: "Win back patients before they disappear from the chronic book."
-};
-
 export default async function FollowUpsPage() {
-  const { tasks, completedThisWeek } = await getFollowUpQueueData();
-  const tasksDueToday = tasks.filter((task) => daysFromNow(task.dueDate) === 0).length;
-  const overdueTasks = tasks.filter((task) => daysFromNow(task.dueDate) < 0 || task.type === "OVERDUE").length;
-  const revenueAtRisk = tasks
+  const { tasks, staff, completedThisWeek } = await getFollowUpQueueData();
+  const activeTasks = tasks.filter((task) => task.status !== "DONE" && task.status !== "CANCELLED");
+  const tasksDueToday = activeTasks.filter((task) => daysFromNow(task.dueDate) === 0 && !isSnoozedFuture(task)).length;
+  const overdueTasks = activeTasks.filter((task) => (daysFromNow(task.dueDate) < 0 || task.type === "OVERDUE") && !isSnoozedFuture(task)).length;
+  const revenueAtRisk = activeTasks
     .filter((task) => daysFromNow(task.dueDate) < 0 || task.type === "OVERDUE" || task.patient?.riskScore === "HIGH" || task.type === "LOST_PATIENT_REVIVAL")
     .reduce((sum, task) => sum + (task.patient ? estimateMonthlyPatientValue(task.patient) : 0), 0);
-  const highRiskTasks = tasks.filter((task) => task.patient?.riskScore === "HIGH").length;
+  const highRiskTasks = activeTasks.filter((task) => task.patient?.riskScore === "HIGH").length;
+  const lanes = [
+    { title: "Critical overdue", helper: "Recover missed refills, patient risk, and revenue leakage first.", tasks: activeTasks.filter((task) => !isSnoozedFuture(task) && (daysFromNow(task.dueDate) < 0 || task.type === "OVERDUE" || task.patient?.riskScore === "HIGH")), urgent: true },
+    { title: "Due today", helper: "Clear today’s refill and payment work before close.", tasks: activeTasks.filter((task) => !isSnoozedFuture(task) && daysFromNow(task.dueDate) === 0 && task.status !== "IN_PROGRESS"), urgent: false },
+    { title: "In progress", helper: "Tasks already being worked by staff.", tasks: activeTasks.filter((task) => task.status === "IN_PROGRESS"), urgent: false },
+    { title: "Snoozed", helper: "Paused follow-ups that return when their snooze date arrives.", tasks: activeTasks.filter(isSnoozedFuture), urgent: false },
+    { title: "Upcoming", helper: "Next follow-ups to prepare before they become urgent.", tasks: activeTasks.filter((task) => !isSnoozedFuture(task) && daysFromNow(task.dueDate) > 0 && task.status !== "IN_PROGRESS"), urgent: false },
+    { title: "Recently completed", helper: "Completed follow-ups with recorded outcomes and value.", tasks: tasks.filter((task) => task.status === "DONE").slice(0, 8), urgent: false }
+  ];
 
   return (
     <div className="space-y-6">
@@ -64,21 +65,32 @@ export default async function FollowUpsPage() {
         <StatCard title="Completed this week" value={String(completedThisWeek)} helper="Done follow-ups since week start" icon={<CheckCircle2 className="h-5 w-5" />} tone="emerald" trend="Discipline" />
       </section>
 
+      {tasks.length === 0 ? (
+        <section className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center shadow-soft">
+          <h2 className="text-2xl font-semibold tracking-tight text-navy-950">No follow-ups yet</h2>
+          <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-slate-600">Follow-ups protect chronic revenue by turning refill reminders, payment nudges, prescription renewals, and delivery checks into assigned work.</p>
+          <div className="mt-5 flex flex-wrap justify-center gap-3">
+            <Link href="/patients" className="focus-ring rounded-lg bg-navy-950 px-4 py-2.5 text-sm font-semibold text-white">Review Patients</Link>
+            <Link href="/imports" className="focus-ring rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700">Import Follow-Ups</Link>
+          </div>
+        </section>
+      ) : null}
+
       <div className="grid gap-5 xl:grid-cols-2">
-        {followUpTypeOptions.map((type) => {
-          const group = tasks.filter((task) => task.type === type);
+        {lanes.map((lane) => {
+          const group = lane.tasks;
           const groupValue = group.reduce((sum, task) => sum + (task.patient ? estimateMonthlyPatientValue(task.patient) : 0), 0);
-          const urgent = type === "OVERDUE" || type === "LOST_PATIENT_REVIVAL" || group.some((task) => task.patient?.riskScore === "HIGH" || daysFromNow(task.dueDate) < 0);
+          const urgent = lane.urgent || group.some((task) => task.patient?.riskScore === "HIGH" || daysFromNow(task.dueDate) < 0);
 
           return (
-            <section key={type} className={urgent ? "rounded-lg border border-rose-200 bg-rose-50/50 p-4" : "rounded-lg border border-slate-200 bg-slate-50 p-4"}>
+            <section key={lane.title} className={urgent ? "rounded-lg border border-rose-200 bg-rose-50/50 p-4" : "rounded-lg border border-slate-200 bg-slate-50 p-4"}>
               <div className="mb-4 flex items-start justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2">
                     {urgent ? <ShieldAlert className="h-4 w-4 text-rose-700" aria-hidden="true" /> : <MessageSquareReply className="h-4 w-4 text-clinical-700" aria-hidden="true" />}
-                    <h2 className="text-lg font-semibold text-navy-950">{enumLabel(type)}</h2>
+                    <h2 className="text-lg font-semibold text-navy-950">{lane.title}</h2>
                   </div>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{groupCopy[type]}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{lane.helper}</p>
                 </div>
                 <div className="shrink-0 text-right">
                   <span className={urgent ? "rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-700 ring-1 ring-rose-200" : "rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200"}>
@@ -89,7 +101,7 @@ export default async function FollowUpsPage() {
               </div>
               <div className="grid gap-3">
                 {group.length > 0 ? (
-                  group.map((task) => <FollowUpTaskCard key={task.id} task={task} />)
+                  group.map((task) => <FollowUpTaskCard key={task.id} task={task} staff={staff.map((member) => ({ id: member.id, name: member.name, role: member.role, branchId: member.branchId, branchName: member.branch?.name ?? null }))} allTasks={tasks.map((item) => ({ id: item.id, branchId: item.branchId, assignedStaffId: item.assignedStaffId, status: item.status, dueDate: item.dueDate.toISOString() }))} />)
                 ) : (
                   <div className="rounded-lg border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-500">
                     No active tasks in this queue.
@@ -102,6 +114,13 @@ export default async function FollowUpsPage() {
       </div>
     </div>
   );
+}
+
+function isSnoozedFuture(task: { status: string; snoozedUntil?: Date | null }) {
+  if (task.status !== "SNOOZED" || !task.snoozedUntil) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return task.snoozedUntil >= today;
 }
 
 function HeroSignal({

@@ -37,6 +37,7 @@ const paidOrClosedOrderStatuses: OrderStatus[] = [
 
 const openFollowUpStatuses: FollowUpStatus[] = [
   FollowUpStatus.PENDING,
+  FollowUpStatus.IN_PROGRESS,
   FollowUpStatus.SNOOZED
 ];
 

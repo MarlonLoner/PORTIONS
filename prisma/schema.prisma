@@ -40,8 +40,22 @@ enum FollowUpType {
 
 enum FollowUpStatus {
   PENDING
+  IN_PROGRESS
   DONE
   SNOOZED
+  CANCELLED
+}
+
+enum FollowUpOutcomeType {
+  PATIENT_CONTACTED
+  REFILL_CONFIRMED
+  DELIVERY_BOOKED
+  COLLECTION_CONFIRMED
+  PAYMENT_PENDING
+  NO_RESPONSE
+  CALLBACK_REQUESTED
+  PATIENT_LOST
+  OTHER
 }
 
 enum OrderSource {
@@ -298,8 +312,28 @@ model FollowUpTask {
   suggestedMessage String
   assignedStaffId  String?
   assignedStaff    StaffMember?   @relation(fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  snoozedUntil     DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  outcomeType      FollowUpOutcomeType?
+  outcomeNotes     String?
+  valueAmount      Decimal        @default(0) @db.Decimal(12, 2)
+  lastContactedAt  DateTime?
+  activities       FollowUpTaskActivity[]
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
+}
+
+model FollowUpTaskActivity {
+  id             String       @id @default(cuid())
+  followUpTaskId String
+  followUpTask   FollowUpTask @relation(fields: [followUpTaskId], references: [id], onDelete: Cascade)
+  activityType   String
+  description    String
+  actorName      String?
+  createdAt      DateTime     @default(now())
+
+  @@index([followUpTaskId, createdAt])
 }
 
 model Order {

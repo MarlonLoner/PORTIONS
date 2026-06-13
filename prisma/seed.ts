@@ -1,6 +1,7 @@
 import {
   FollowUpStatus,
   FollowUpType,
+  FollowUpOutcomeType,
   NotificationDeliveryChannel,
   NotificationDeliveryStatus,
   NotificationRecipientType,
@@ -184,6 +185,7 @@ async function main() {
   await prisma.stockItem.deleteMany();
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
+  await prisma.followUpTaskActivity.deleteMany();
   await prisma.followUpTask.deleteMany();
   await prisma.refillEvent.deleteMany();
   await prisma.patientMedication.deleteMany();
@@ -286,18 +288,51 @@ async function main() {
       [FollowUpType.LOST_PATIENT_REVIVAL]: "Patient has not refilled recently"
     }[type];
 
+    const followUpStatus =
+      index % 17 === 0 ? FollowUpStatus.DONE :
+      index % 13 === 0 ? FollowUpStatus.SNOOZED :
+      index % 11 === 0 ? FollowUpStatus.IN_PROGRESS :
+      FollowUpStatus.PENDING;
+    const completed = followUpStatus === FollowUpStatus.DONE;
+    const snoozed = followUpStatus === FollowUpStatus.SNOOZED;
+
     await prisma.followUpTask.create({
       data: {
         patientId: patient.id,
         customerName: patient.name,
         type,
-        status: index % 13 === 0 ? FollowUpStatus.SNOOZED : FollowUpStatus.PENDING,
+        status: followUpStatus,
         reason,
         branchId: branch.id,
         dueDate: addDays(dueOffset),
         suggestedAction: type === FollowUpType.LOST_PATIENT_REVIVAL ? "Send revival offer and ask if they changed medication." : "Send WhatsApp message and log response.",
         suggestedMessage: `Hi ${patient.name.split(" ")[0]}, this is PORTIONS ${branch.name}. ${reason}. Can we help prepare your medicines today?`,
-        assignedStaffId: assignedStaff.id
+        assignedStaffId: assignedStaff.id,
+        snoozedUntil: snoozed ? addDays(2) : null,
+        startedAt: followUpStatus === FollowUpStatus.IN_PROGRESS || completed ? addDays(-1) : null,
+        completedAt: completed ? addDays(0) : null,
+        lastContactedAt: completed ? addDays(0) : null,
+        outcomeType: completed ? FollowUpOutcomeType.REFILL_CONFIRMED : null,
+        outcomeNotes: completed ? "Patient confirmed refill support and branch collection." : null,
+        valueAmount: money(completed ? 42 + (index % 6) * 8 : 0),
+        activities: {
+          create: [
+            {
+              activityType: "CREATED",
+              description: "Follow-up created from seeded chronic revenue workflow.",
+              actorName: "PORTIONS"
+            },
+            ...(followUpStatus === FollowUpStatus.IN_PROGRESS
+              ? [{ activityType: "STARTED", description: `Started by ${assignedStaff.name}.`, actorName: assignedStaff.name }]
+              : []),
+            ...(snoozed
+              ? [{ activityType: "SNOOZED", description: "Snoozed for patient callback window.", actorName: assignedStaff.name }]
+              : []),
+            ...(completed
+              ? [{ activityType: "COMPLETED", description: "Follow-up completed with refill confirmed.", actorName: assignedStaff.name }]
+              : [])
+          ]
+        }
       }
     });
   }
