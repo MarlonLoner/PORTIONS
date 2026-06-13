@@ -68,41 +68,49 @@ export function FollowUpTaskCard({ task, staff, allTasks }: { task: FollowUpTask
   const highRisk = record.patient?.riskScore === "HIGH";
   const estimatedValue = record.patient ? estimateMonthlyPatientValue(record.patient) : Number(record.valueAmount ?? 0);
   const operationalSuggestion = record.patient ? chronicActionCopy(record.patient as any) : pharmacySuggestion(record.type, record.customerName);
-  const compatibleStaff = staff.filter((member) => member.branchId === record.branchId);
+  const branchName = record.branch?.name ?? "Unassigned branch";
+  const compatibleStaff = record.branchId ? staff.filter((member) => member.branchId === record.branchId) : [];
   const recommended = useMemo(() => recommendStaff(record, compatibleStaff, allTasks), [record, compatibleStaff, allTasks]);
 
   async function update(payload: Record<string, string | null>, success: string) {
+    const normalizedPayload = normalizePayload(payload);
     setBusy(success);
     setError("");
     setFeedback("");
     const previous = record;
-    const optimisticStaff = payload.assignedStaffId ? staff.find((member) => member.id === payload.assignedStaffId) : null;
+    const optimisticStaff = normalizedPayload.assignedStaffId ? staff.find((member) => member.id === normalizedPayload.assignedStaffId) : null;
     setRecord((current) => ({
       ...current,
-      ...payload,
-      assignedStaffId: "assignedStaffId" in payload ? payload.assignedStaffId : current.assignedStaffId,
-      assignedStaff: "assignedStaffId" in payload ? (optimisticStaff ? { name: optimisticStaff.name } : null) : current.assignedStaff
+      ...normalizedPayload,
+      assignedStaffId: "assignedStaffId" in normalizedPayload ? normalizedPayload.assignedStaffId : current.assignedStaffId,
+      assignedStaff: "assignedStaffId" in normalizedPayload ? (optimisticStaff ? { name: optimisticStaff.name } : null) : current.assignedStaff
     }));
 
-    const response = await fetch(`/api/follow-ups/${record.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    setBusy("");
-
-    if (!response.ok) {
+    try {
+      const response = await fetch(`/api/follow-ups/${record.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(normalizedPayload)
+      });
       const result = await response.json().catch(() => ({ error: "Follow-up could not be updated." }));
-      setRecord(previous);
-      setError(result.error ?? "Follow-up could not be updated.");
-      return false;
-    }
 
-    const updated = await response.json();
-    setRecord(updated);
-    setFeedback(success);
-    router.refresh();
-    return true;
+      if (!response.ok) {
+        setRecord(previous);
+        setError(result.error ?? "Follow-up could not be updated.");
+        return false;
+      }
+
+      setRecord(result);
+      setFeedback(success);
+      router.refresh();
+      return true;
+    } catch {
+      setRecord(previous);
+      setError("Follow-up assignment could not be saved. Please try again.");
+      return false;
+    } finally {
+      setBusy("");
+    }
   }
 
   function snooze(days: number) {
@@ -110,6 +118,14 @@ export function FollowUpTaskCard({ task, staff, allTasks }: { task: FollowUpTask
     date.setDate(date.getDate() + days);
     date.setHours(9, 0, 0, 0);
     return update({ status: "SNOOZED", snoozedUntil: date.toISOString() }, `Snoozed for ${days} day${days > 1 ? "s" : ""}.`);
+  }
+
+  function assignRecommended(staffMember: StaffOption) {
+    if (!isValidRecommendedStaff(staffMember, record)) {
+      setError("Recommended staff member is no longer available for this branch.");
+      return;
+    }
+    update({ assignedStaffId: staffMember.id }, `Assigned recommended owner: ${staffMember.name}.`);
   }
 
   return (
@@ -120,7 +136,7 @@ export function FollowUpTaskCard({ task, staff, allTasks }: { task: FollowUpTask
             <Link href={`/follow-ups/${record.id}`} className="text-sm font-semibold text-navy-950 hover:text-clinical-800">{record.customerName}</Link>
             {record.patient ? <RiskBadge risk={record.patient.riskScore} /> : null}
           </div>
-          <p className="mt-1 text-xs text-slate-500">{record.branch.name} - {enumLabel(record.type)}</p>
+          <p className="mt-1 text-xs text-slate-500">{branchName} - {enumLabel(record.type)}</p>
         </div>
         <StatusBadge status={record.status} />
       </div>
@@ -139,8 +155,9 @@ export function FollowUpTaskCard({ task, staff, allTasks }: { task: FollowUpTask
             <option value="">Unassigned</option>
             {compatibleStaff.map((member) => <option key={member.id} value={member.id}>{member.name}{member.role ? ` - ${member.role}` : ""}</option>)}
           </select>
-          {recommended ? <button type="button" disabled={Boolean(busy) || record.assignedStaffId === recommended.id} onClick={() => update({ assignedStaffId: recommended.id }, `Assigned recommended owner: ${recommended.name}.`)} className="focus-ring rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Assign recommended</button> : null}
+          {recommended ? <button type="button" disabled={Boolean(busy) || record.assignedStaffId === recommended.id || !isValidRecommendedStaff(recommended, record)} onClick={() => assignRecommended(recommended)} className="focus-ring rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Assign recommended</button> : null}
         </div>
+        {recommended && !isValidRecommendedStaff(recommended, record) ? <p className="mt-2 text-xs font-semibold text-rose-700">Recommended staff member is no longer available for this branch.</p> : null}
       </div>
 
       <p className={overdue || highRisk ? "mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm leading-6 text-rose-800" : "mt-3 rounded-lg bg-clinical-50 px-3 py-2 text-sm leading-6 text-clinical-800"}>{operationalSuggestion}</p>
@@ -178,6 +195,19 @@ export function FollowUpTaskCard({ task, staff, allTasks }: { task: FollowUpTask
   );
 }
 
+function normalizePayload(payload: Record<string, string | null>) {
+  if (!("assignedStaffId" in payload)) return payload;
+  const assignedStaffId = payload.assignedStaffId;
+  return {
+    ...payload,
+    assignedStaffId: assignedStaffId && assignedStaffId !== "none" ? assignedStaffId : null
+  };
+}
+
+function isValidRecommendedStaff(staff: StaffOption | null, task: FollowUpTaskRecord) {
+  return Boolean(staff?.id && staff.branchId === task.branchId);
+}
+
 function recommendStaff(task: FollowUpTaskRecord, staff: StaffOption[], allTasks: TaskWorkload[]) {
   if (task.patient?.assignedStaffId) {
     const patientOwner = staff.find((member) => member.id === task.patient?.assignedStaffId);
@@ -200,7 +230,7 @@ function workload(staffId: string, tasks: TaskWorkload[]) {
 
 function recommendationReason(task: FollowUpTaskRecord, staff: StaffOption, tasks: TaskWorkload[]) {
   if (task.patient?.assignedStaffId === staff.id) return "This staff member is already assigned to the patient profile.";
-  return `${task.branch.name} ${staff.role ?? "staff member"} with ${workload(staff.id, tasks)} active follow-ups.`;
+  return `${task.branch?.name ?? "This branch"} ${staff.role ?? "staff member"} with ${workload(staff.id, tasks)} active follow-ups.`;
 }
 
 function ActionButton({ label, icon, busy, disabled = false, onClick }: { label: string; icon: ReactNode; busy: boolean; disabled?: boolean; onClick: () => void }) {

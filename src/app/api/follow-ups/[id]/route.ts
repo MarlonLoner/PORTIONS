@@ -51,7 +51,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     });
     if (!existing) return NextResponse.json({ error: "Follow-up task was not found." }, { status: 404 });
 
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Invalid follow-up update request." }, { status: 400 });
+    }
     const data: Prisma.FollowUpTaskUpdateInput = {};
     const activities: Prisma.FollowUpTaskActivityCreateWithoutFollowUpTaskInput[] = [];
     const now = new Date();
@@ -61,9 +64,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (assignedStaffId !== existing.assignedStaffId) {
         if (assignedStaffId) {
           const staff = await prisma.staffMember.findUnique({ where: { id: assignedStaffId } });
-          if (!staff) return NextResponse.json({ error: "Selected staff member was not found." }, { status: 400 });
-          if (staff.branchId && staff.branchId !== existing.branchId) {
-            return NextResponse.json({ error: "Assigned staff member belongs to another branch." }, { status: 400 });
+          if (!staff) return NextResponse.json({ error: "Recommended staff member is no longer available for this branch." }, { status: 400 });
+          if (staff.branchId !== existing.branchId) {
+            return NextResponse.json({ error: "Recommended staff member is no longer available for this branch." }, { status: 400 });
           }
           data.assignedStaff = { connect: { id: assignedStaffId } };
           activities.push({
@@ -154,22 +157,32 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (Object.keys(data).length === 0) {
       const current = await prisma.followUpTask.findUnique({
         where: { id },
-        include: { patient: true, branch: true, assignedStaff: true, activities: { orderBy: { createdAt: "desc" } } }
+        include: {
+          patient: { include: { assignedStaff: true, refillEvents: true } },
+          branch: true,
+          assignedStaff: true,
+          activities: { orderBy: { createdAt: "desc" } }
+        }
       });
       return NextResponse.json(current);
     }
 
-    const updated = await prisma.followUpTask.update({
+    const updated = await prisma.$transaction(async (tx) => tx.followUpTask.update({
       where: { id },
       data: {
         ...data,
         activities: activities.length ? { create: activities } : undefined
       },
-      include: { patient: true, branch: true, assignedStaff: true, activities: { orderBy: { createdAt: "desc" } } }
-    });
+      include: {
+        patient: { include: { assignedStaff: true, refillEvents: true } },
+        branch: true,
+        assignedStaff: true,
+        activities: { orderBy: { createdAt: "desc" } }
+      }
+    }));
 
     if (updated.status === FollowUpStatus.DONE || updated.status === FollowUpStatus.CANCELLED || updated.status === FollowUpStatus.SNOOZED) {
-      await resolveNotificationsForSource({ sourceType: "FOLLOW_UP_TASK", sourceId: updated.id });
+      await resolveNotificationsForSource({ sourceType: "FOLLOW_UP_TASK", sourceId: updated.id }).catch(() => 0);
     }
 
     return NextResponse.json(updated);
@@ -177,6 +190,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
       return NextResponse.json({ error: "Follow-up task was not found." }, { status: 404 });
     }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2021" || error.code === "P2022" || error.code === "P2010")) {
+      return NextResponse.json({
+        error: "Follow-up execution persistence is not available in this database yet. Run npx prisma migrate deploy for migration 20260613090000_add_follow_up_execution."
+      }, { status: 500 });
+    }
+
     return NextResponse.json({ error: "Follow-up task could not be updated." }, { status: 500 });
   }
 }
