@@ -6,6 +6,7 @@ import {
   ClipboardList,
   DollarSign,
   FileText,
+  MessageSquareText,
   PackageSearch,
   ShieldCheck,
   UsersRound
@@ -35,6 +36,7 @@ import {
   getRevenueProtectionPack,
   getStockControlPack
 } from "@/lib/reports";
+import { getCommunicationMetrics } from "@/lib/communications";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +48,7 @@ const statusClasses = {
 
 export default async function ReportsPage() {
   const reportData = await getReportsData();
+  const communicationMetrics = await getCommunicationMetrics();
   const overview = getReportsOverview(reportData);
   const reports = buildReportDocuments(reportData);
   const reportsNeedingAttention = getReportsNeedingAttention(reportData);
@@ -114,6 +117,39 @@ export default async function ReportsPage() {
             No reports have been generated yet.
           </div>
         )}
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-700">Communication Performance Report</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy-950">Prepared, sent, responded, and followed up</h2>
+            <p className="mt-3 max-w-4xl rounded-lg bg-navy-950 p-4 text-sm leading-7 text-white">{communicationMetrics.summary}</p>
+          </div>
+          <Link href="/communications" className="focus-ring rounded-lg bg-navy-950 px-4 py-2.5 text-sm font-semibold text-white">Open Communication Center</Link>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <ExecMetric label="Messages prepared" value={String(communicationMetrics.total)} />
+          <ExecMetric label="Confirmed sent" value={String(communicationMetrics.sentToday)} />
+          <ExecMetric label="Responded" value={String(communicationMetrics.responsesReceived)} />
+          <ExecMetric label="Response rate" value={`${communicationMetrics.responseRate}%`} />
+          <ExecMetric label="No-response count" value={String(communicationMetrics.noResponseCount)} tone={communicationMetrics.noResponseCount > 0 ? "risk" : "normal"} />
+          <ExecMetric label="Follow-ups required" value={String(communicationMetrics.followUpsRequired)} tone={communicationMetrics.followUpsRequired > 0 ? "risk" : "normal"} />
+          <ExecMetric label="Strongest branch" value={communicationMetrics.strongestBranch} />
+          <ExecMetric label="Ready to send" value={String(communicationMetrics.ready)} />
+        </div>
+        <div className="mt-5 grid gap-4 xl:grid-cols-3">
+          <ReportList title="Outcomes" items={communicationMetrics.outcomes.slice(0, 5).map((item) => `${item.label}: ${item.count}`)} />
+          <ReportList title="By source" items={communicationMetrics.bySource.slice(0, 5).map((item) => `${item.label}: ${item.count}`)} />
+          <ReportList title="By staff" items={communicationMetrics.byStaff.slice(0, 5).map((item) => `${item.label}: ${item.count}`)} />
+        </div>
+        <div className="mt-5 rounded-lg bg-clinical-50 p-4 ring-1 ring-clinical-100">
+          <div className="flex items-center gap-2 text-clinical-800">
+            <MessageSquareText className="h-4 w-4" aria-hidden="true" />
+            <p className="text-sm font-semibold">Reporting rule</p>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-clinical-900">PORTIONS reports only manually confirmed sent messages and recorded responses. It does not claim WhatsApp provider delivery success.</p>
+        </div>
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">

@@ -3,6 +3,7 @@
 import { CheckCircle2, Loader2, Plus, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { PrepareCommunicationButton } from "@/components/prepare-communication-button";
 import { getCompatibleAssignmentStaff, getRecommendedAssignee } from "@/lib/action-assignment";
 import { enumLabel, formatCurrency, formatDate, dateInputValue } from "@/lib/format";
 
@@ -315,6 +316,7 @@ function ActionCard({ action, busy, staff, actions, onUpdate }: { action: Action
           <Badge label={enumLabel(action.priority)} className={priorityClasses[action.priority]} />
           <Badge label={enumLabel(action.status)} className={statusClasses[action.status]} />
         </div>
+        <PrepareCommunicationButton sourceType="OPERATIONAL_ACTION" sourceId={action.id} templateType="ACTION_REMINDER" label="Prepare reminder" />
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6">

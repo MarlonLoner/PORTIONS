@@ -16,6 +16,7 @@ import type { ReactNode } from "react";
 import { DataTable } from "@/components/data-table";
 import { OrderStatusBadge } from "@/components/order-status-badge";
 import { OrderWhatsAppBox } from "@/components/order-whatsapp-box";
+import { PrepareCommunicationButton } from "@/components/prepare-communication-button";
 import { enumLabel, formatCurrency, formatDateTime } from "@/lib/format";
 import { getOrderDetail, orderStatusOptions } from "@/lib/data";
 import { orderCustomerMessage, orderRevenueUrgency, orderSuggestedAction } from "@/lib/orders";
@@ -100,6 +101,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               <p className="mt-4 rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-700">{action}</p>
               <div className="mt-5">
                 <OrderWhatsAppBox message={customerUpdate} />
+              </div>
+              <div className="mt-4">
+                <PrepareCommunicationButton sourceType="ORDER" sourceId={order.id} templateType={revenueBlocked ? "ORDER_PAYMENT" : "ORDER_UPDATE"} label="Open Communication workflow" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-navy-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-navy-800" />
               </div>
             </div>
           </div>

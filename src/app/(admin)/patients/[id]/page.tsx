@@ -14,6 +14,7 @@ import {
 import type { ReactNode } from "react";
 import { DataTable } from "@/components/data-table";
 import { PatientWhatsAppBox } from "@/components/patient-whatsapp-box";
+import { PrepareCommunicationButton } from "@/components/prepare-communication-button";
 import { RiskBadge } from "@/components/risk-badge";
 import { StatusBadge } from "@/components/status-badge";
 import { chronicActionCopy, estimateMonthlyPatientValue, isPatientOverdue } from "@/lib/chronic";
@@ -98,6 +99,9 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
               <p className="mt-4 rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-700">{suggestedAction}</p>
               <div className="mt-5">
                 <PatientWhatsAppBox message={whatsappSuggestion} />
+              </div>
+              <div className="mt-4">
+                <PrepareCommunicationButton sourceType="PATIENT" sourceId={patient.id} templateType={overdue ? "OVERDUE_REFILL" : "REFILL_REMINDER"} label="Open Communication workflow" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-navy-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-navy-800" />
               </div>
             </div>
           </div>

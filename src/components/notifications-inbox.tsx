@@ -3,6 +3,7 @@
 import { CheckCircle2, Clipboard, Loader2, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { PrepareCommunicationButton } from "@/components/prepare-communication-button";
 import { enumLabel, formatDateTime } from "@/lib/format";
 
 export type NotificationInboxRecord = {
@@ -209,6 +210,7 @@ function NotificationCard({ notification, busy, onUpdate, onCopy }: { notificati
         <Action label="Dismiss" busy={busy} onClick={() => onUpdate(notification.id, { status: "DISMISSED" }, "Notification dismissed.")} />
         <Action label="WhatsApp Ready" busy={busy} onClick={() => onUpdate(notification.id, { deliveryChannel: "WHATSAPP_READY" }, "Marked WhatsApp ready.")} />
         <Action label="Email Ready" busy={busy} onClick={() => onUpdate(notification.id, { deliveryChannel: "EMAIL_READY" }, "Marked email ready.")} />
+        <PrepareCommunicationButton sourceType="NOTIFICATION" sourceId={notification.id} templateType="NOTIFICATION_ESCALATION" label="Prepare escalation" />
         {notification.actionId ? <Link href={`/action-center/${notification.actionId}`} className="focus-ring inline-flex items-center rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white">Open source action</Link> : null}
         <Link href="/action-center" className="focus-ring inline-flex items-center rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">Open Action Center</Link>
         <button type="button" onClick={() => onCopy(notification.copyMessage)} className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">

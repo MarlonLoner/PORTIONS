@@ -3,6 +3,7 @@ import { ArrowLeft, CalendarClock, ClipboardCheck, DollarSign, History, ShieldCh
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ActionDetailActions } from "@/components/action-detail-actions";
+import { PrepareCommunicationButton } from "@/components/prepare-communication-button";
 import { getOperationalActionById, getOperationalActionsData } from "@/lib/data";
 import { enumLabel, formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import {
@@ -61,6 +62,9 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-700">Recommended action</p>
           <h2 className="mt-2 text-xl font-semibold tracking-tight text-navy-950">What should happen next</h2>
           <p className="mt-4 rounded-lg bg-clinical-50 p-4 text-sm font-semibold leading-7 text-clinical-900 ring-1 ring-clinical-100">{getActionSuggestedNextStep(action)}</p>
+          <div className="mt-4">
+            <PrepareCommunicationButton sourceType="OPERATIONAL_ACTION" sourceId={action.id} templateType="ACTION_REMINDER" label="Prepare staff reminder" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-navy-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-navy-800" />
+          </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <Mini label="Category" value={enumLabel(action.category)} />
             <Mini label="Source" value={action.sourceType.replace(/_/g, " ")} />

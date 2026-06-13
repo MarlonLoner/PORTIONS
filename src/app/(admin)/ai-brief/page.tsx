@@ -7,6 +7,7 @@ import {
   CreditCard,
   DollarSign,
   MessageSquareReply,
+  MessageSquareText,
   PackageSearch,
   Pill,
   Sparkles,
@@ -37,6 +38,7 @@ import {
   getAccountabilityRisks
 } from "@/lib/accountability-intelligence";
 import { getEscalationAiSummary, getNotificationSummary } from "@/lib/notifications";
+import { getCommunicationMetrics } from "@/lib/communications";
 import { getEventFundingSummary, getEventReadinessSummary } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +52,7 @@ const healthClasses: Record<NetworkHealthStatus, string> = {
 
 export default async function AiBriefPage() {
   const briefData = await getAiBriefData();
+  const communicationMetrics = await getCommunicationMetrics();
   const intelligence = {
     orders: briefData.orders,
     patients: briefData.patients,
@@ -146,6 +149,28 @@ export default async function AiBriefPage() {
             <MiniMetric label="High-value orders" value={String(revenue.highValueOrders.length)} />
           </div>
           <p className="mt-4 rounded-lg bg-clinical-50 p-4 text-sm leading-6 text-clinical-900">{revenue.explanation}</p>
+        </Panel>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[1.08fr_0.92fr]">
+        <AiBriefCard title="Communication Brief" variant="executive" action={communicationMetrics.ready > 0 ? "Open the Communication Center and send the ready refill/payment messages before 10:00." : "Prepare messages from the highest-risk follow-up, order, event, and action queues."}>
+          <p>{communicationMetrics.summary}</p>
+          <div className="mt-4">
+            <Link href="/communications" className="focus-ring inline-flex rounded-lg bg-white px-3 py-2 text-xs font-semibold text-navy-950 ring-1 ring-slate-200 transition hover:bg-clinical-50">
+              Open Communication Center
+            </Link>
+          </div>
+        </AiBriefCard>
+
+        <Panel title="Communication Signals" eyebrow="Manual delivery discipline">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MiniMetric label="Ready to send" value={String(communicationMetrics.ready)} tone={communicationMetrics.ready > 0 ? "warn" : "normal"} />
+            <MiniMetric label="Sent today" value={String(communicationMetrics.sentToday)} />
+            <MiniMetric label="Awaiting response" value={String(communicationMetrics.awaitingResponse)} tone={communicationMetrics.awaitingResponse > 0 ? "warn" : "normal"} />
+            <MiniMetric label="Responses received" value={String(communicationMetrics.responsesReceived)} />
+            <MiniMetric label="Follow-ups required" value={String(communicationMetrics.followUpsRequired)} tone={communicationMetrics.followUpsRequired > 0 ? "risk" : "normal"} />
+            <MiniMetric label="Response rate" value={`${communicationMetrics.responseRate}%`} />
+          </div>
         </Panel>
       </section>
 

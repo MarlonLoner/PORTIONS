@@ -30,11 +30,13 @@ import {
 import { formatCurrency } from "@/lib/format";
 import { getEscalationAiSummary, getNotificationSummary } from "@/lib/notifications";
 import { getEventFundingSummary, getEventReadinessSummary } from "@/lib/events";
+import { getCommunicationMetrics } from "@/lib/communications";
 
 export const dynamic = "force-dynamic";
 
 export default async function ExecutivePackPage() {
   const data = await getExecutivePackData();
+  const communicationMetrics = await getCommunicationMetrics();
   const metadata = getPrintMetadata(data);
   const executive = getExecutiveSummary(data);
   const imported = getImportedDataSummary(data);
@@ -178,6 +180,20 @@ export default async function ExecutivePackPage() {
           <Metric label="Resolved this week" value={String(notificationSummary.resolvedThisWeek)} />
         </MetricGrid>
         <Narrative label="Escalation narrative" value={getEscalationAiSummary(data.notifications)} />
+      </ReportSection>
+
+      <ReportSection title="Communication Results" eyebrow="Manual delivery and response evidence" icon={<ClipboardCheck className="h-5 w-5" />}>
+        <MetricGrid>
+          <Metric label="Communications sent" value={String(communicationMetrics.sentToday)} />
+          <Metric label="Responses received" value={String(communicationMetrics.responsesReceived)} />
+          <Metric label="Response rate" value={`${communicationMetrics.responseRate}%`} />
+          <Metric label="Refill confirmations" value={String(communicationMetrics.outcomes.find((item) => item.label === "Refill Confirmed")?.count ?? 0)} />
+          <Metric label="Payment outcomes" value={String((communicationMetrics.outcomes.find((item) => item.label === "Payment Received")?.count ?? 0) + (communicationMetrics.outcomes.find((item) => item.label === "Payment Promised")?.count ?? 0))} />
+          <Metric label="Event attendance confirmed" value={String(communicationMetrics.outcomes.find((item) => item.label === "Event Attendance Confirmed")?.count ?? 0)} />
+          <Metric label="No-response risk" value={String(communicationMetrics.noResponseCount)} />
+          <Metric label="Branch highlight" value={communicationMetrics.strongestBranch} />
+        </MetricGrid>
+        <Narrative label="Management recommendation" value={`${communicationMetrics.summary} Keep the next review focused on manual send confirmation, response capture, and follow-up creation where patients or customers do not respond.`} />
       </ReportSection>
 
       <div className="grid gap-6 xl:grid-cols-3">

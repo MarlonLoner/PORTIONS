@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, CalendarClock, CheckCircle2, ClipboardCheck, History, Megaphone, WalletCards } from "lucide-react";
 import Link from "next/link";
 import { EventChecklistAssignment } from "@/components/event-checklist-assignment";
+import { PrepareCommunicationButton } from "@/components/prepare-communication-button";
 import { StatusBadge } from "@/components/status-badge";
 import {
   createLinkedChecklistAction,
@@ -128,6 +129,10 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-800">AI event coach</p>
             <p className="mt-3 text-sm leading-7 text-clinical-950">{getEventAiSummary(event)}</p>
             <p className="mt-4 rounded-lg bg-white p-3 text-sm font-semibold leading-6 text-navy-950 ring-1 ring-clinical-100">{getEventNextAction(event)}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <PrepareCommunicationButton sourceType="EVENT" sourceId={event.id} templateType="EVENT_REMINDER" label="Prepare event message" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-navy-800" />
+              <Link href="/communications" className="focus-ring rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">Open Communication Center</Link>
+            </div>
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               <Mini label="Readiness label" value={readinessSummary.label} />
               <Mini label="Risk level" value={readinessSummary.riskLevel} />

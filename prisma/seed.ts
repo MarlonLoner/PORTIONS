@@ -1,4 +1,8 @@
 import {
+  CommunicationChannel,
+  CommunicationOutcomeType,
+  CommunicationRecipientType,
+  CommunicationStatus,
   FollowUpStatus,
   FollowUpType,
   FollowUpOutcomeType,
@@ -178,6 +182,8 @@ const stockProducts = [
 ];
 
 async function main() {
+  await prisma.communicationActivity.deleteMany();
+  await prisma.communication.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.operationalActionActivity.deleteMany();
   await prisma.operationalAction.deleteMany();
@@ -696,6 +702,129 @@ async function main() {
         metadata: { seed: true, reason: "pilot review" }
       }
     ]
+  });
+
+  const [demoFollowUp, demoOrder, demoEvent, demoNotification] = await Promise.all([
+    prisma.followUpTask.findFirst({ include: { patient: true, branch: true, assignedStaff: true }, orderBy: { dueDate: "asc" } }),
+    prisma.order.findFirst({ where: { status: OrderStatus.AWAITING_PAYMENT }, include: { patient: true, branch: true, assignedStaff: true }, orderBy: { createdAt: "desc" } }),
+    prisma.event.findFirst({ include: { ownerStaff: true, branch: true }, orderBy: { startDate: "asc" } }),
+    prisma.notification.findFirst({ include: { recipientStaff: true, branch: true, action: true }, orderBy: { createdAt: "desc" } })
+  ]);
+  const demoAction = openActions[0];
+
+  await prisma.communication.createMany({
+    data: [
+      ...(demoFollowUp ? [{
+        channel: CommunicationChannel.WHATSAPP,
+        status: CommunicationStatus.READY,
+        recipientName: demoFollowUp.patient?.name ?? demoFollowUp.customerName,
+        recipientPhone: demoFollowUp.patient?.phone ?? null,
+        recipientType: demoFollowUp.patient ? CommunicationRecipientType.PATIENT : CommunicationRecipientType.CUSTOMER,
+        message: `Hi ${(demoFollowUp.patient?.name ?? demoFollowUp.customerName).split(" ")[0]}, this is PORTIONS Demo Pharmacy. Your refill is due. Would you prefer branch collection or delivery?`,
+        subject: "Refill reminder",
+        sourceType: "FOLLOW_UP_TASK",
+        sourceId: demoFollowUp.id,
+        patientId: demoFollowUp.patientId,
+        followUpTaskId: demoFollowUp.id,
+        assignedStaffId: demoFollowUp.assignedStaffId,
+        branchId: demoFollowUp.branchId,
+        metadata: { seed: true, templateType: "REFILL_REMINDER" }
+      }] : []),
+      ...(demoOrder ? [{
+        channel: CommunicationChannel.WHATSAPP,
+        status: CommunicationStatus.SENT,
+        recipientName: demoOrder.customerName,
+        recipientPhone: demoOrder.phone,
+        recipientType: demoOrder.patient ? CommunicationRecipientType.PATIENT : CommunicationRecipientType.CUSTOMER,
+        message: `Hi ${demoOrder.customerName.split(" ")[0]}, your order is ready for the next step. Please confirm payment or let us know if you need assistance.`,
+        subject: "Order payment reminder",
+        sourceType: "ORDER",
+        sourceId: demoOrder.id,
+        patientId: demoOrder.patientId,
+        orderId: demoOrder.id,
+        assignedStaffId: demoOrder.assignedStaffId,
+        branchId: demoOrder.branchId,
+        openedAt: addDays(-1),
+        sentAt: addDays(-1),
+        metadata: { seed: true, templateType: "ORDER_PAYMENT" }
+      }] : []),
+      ...(demoEvent ? [{
+        channel: CommunicationChannel.WHATSAPP,
+        status: CommunicationStatus.OPENED,
+        recipientName: demoEvent.ownerStaff?.name ?? demoEvent.companyName ?? demoEvent.title,
+        recipientPhone: demoEvent.ownerStaff?.phone ?? null,
+        recipientType: demoEvent.ownerStaff ? CommunicationRecipientType.STAFF : CommunicationRecipientType.EVENT_PARTNER,
+        message: `Hi ${demoEvent.ownerStaff?.name ?? demoEvent.companyName ?? "there"}, reminder: ${demoEvent.title} is scheduled for ${demoEvent.startDate.toISOString().slice(0, 10)}. Please confirm your availability and preparations.`,
+        subject: "Event preparation reminder",
+        sourceType: "EVENT",
+        sourceId: demoEvent.id,
+        eventId: demoEvent.id,
+        assignedStaffId: demoEvent.ownerStaffId,
+        branchId: demoEvent.branchId,
+        openedAt: addDays(0),
+        metadata: { seed: true, templateType: "EVENT_REMINDER" }
+      }] : []),
+      ...(demoAction ? [{
+        channel: CommunicationChannel.WHATSAPP,
+        status: CommunicationStatus.RESPONDED,
+        recipientName: staff.find((member) => member.id === demoAction.assignedStaffId)?.name ?? "Action owner",
+        recipientPhone: staff.find((member) => member.id === demoAction.assignedStaffId)?.phone ?? null,
+        recipientType: CommunicationRecipientType.STAFF,
+        message: `Hi ${staff.find((member) => member.id === demoAction.assignedStaffId)?.name ?? "there"}, the action '${demoAction.title}' is due soon. Please update PORTIONS when you start or complete it.`,
+        subject: "Staff action reminder",
+        sourceType: "OPERATIONAL_ACTION",
+        sourceId: demoAction.id,
+        operationalActionId: demoAction.id,
+        assignedStaffId: demoAction.assignedStaffId,
+        branchId: demoAction.branchId,
+        openedAt: addDays(-1),
+        sentAt: addDays(-1),
+        respondedAt: addDays(0),
+        responseText: "I have started this and will update before close.",
+        outcomeType: CommunicationOutcomeType.RESPONSE_RECEIVED,
+        metadata: { seed: true, templateType: "ACTION_REMINDER" }
+      }] : []),
+      ...(demoNotification ? [{
+        channel: CommunicationChannel.WHATSAPP,
+        status: CommunicationStatus.SENT,
+        recipientName: demoNotification.recipientStaff?.name ?? demoNotification.recipientRole ?? "Operations manager",
+        recipientPhone: demoNotification.recipientStaff?.phone ?? null,
+        recipientType: demoNotification.recipientStaff ? CommunicationRecipientType.STAFF : CommunicationRecipientType.OTHER,
+        message: `Hi ${demoNotification.recipientStaff?.name ?? "there"}, PORTIONS has flagged '${demoNotification.title}'. Please review and update the relevant work item before close of business.`,
+        subject: "Notification escalation",
+        sourceType: "NOTIFICATION",
+        sourceId: demoNotification.id,
+        notificationId: demoNotification.id,
+        operationalActionId: demoNotification.actionId,
+        assignedStaffId: demoNotification.recipientStaffId,
+        branchId: demoNotification.branchId,
+        openedAt: addDays(0),
+        sentAt: addDays(0),
+        followUpRequired: true,
+        followUpDate: addDays(1),
+        metadata: { seed: true, templateType: "NOTIFICATION_ESCALATION" }
+      }] : [])
+    ]
+  });
+
+  const communications = await prisma.communication.findMany({ select: { id: true, status: true, sourceType: true, recipientName: true } });
+  await prisma.communicationActivity.createMany({
+    data: communications.flatMap((communication) => [
+      {
+        communicationId: communication.id,
+        activityType: "CREATED",
+        description: `Seeded ${communication.sourceType.toLowerCase().replace(/_/g, " ")} communication for ${communication.recipientName}.`,
+        actorName: "PORTIONS"
+      },
+      ...(communication.status === CommunicationStatus.SENT || communication.status === CommunicationStatus.RESPONDED
+        ? [{
+            communicationId: communication.id,
+            activityType: "MARKED_SENT",
+            description: "Manual delivery confirmed in demo data.",
+            actorName: "PORTIONS"
+          }]
+        : [])
+    ])
   });
 
   console.log("PORTIONS demo database seeded.");

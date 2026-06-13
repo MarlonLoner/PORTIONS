@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { RiskBadge } from "@/components/risk-badge";
+import { PrepareCommunicationButton } from "@/components/prepare-communication-button";
 import { StatusBadge } from "@/components/status-badge";
 import { chronicActionCopy, estimateMonthlyPatientValue } from "@/lib/chronic";
 import { daysFromNow, enumLabel, formatCurrency, formatDate } from "@/lib/format";
@@ -187,6 +188,7 @@ export function FollowUpTaskCard({ task, staff, allTasks }: { task: FollowUpTask
         <ActionButton busy={false} icon={showMessage ? <MessageSquareText className="h-3.5 w-3.5" /> : <Wand2 className="h-3.5 w-3.5" />} label="Message" onClick={() => setShowMessage((value) => !value)} />
         <ActionButton busy={busy === "Snoozed for 3 days."} icon={<Clock3 className="h-3.5 w-3.5" />} label="Snooze 3d" disabled={record.status === "DONE"} onClick={() => snooze(3)} />
         <ActionButton busy={busy === "Reopened."} icon={<RotateCcw className="h-3.5 w-3.5" />} label="Reopen" disabled={record.status !== "DONE"} onClick={() => update({ status: "PENDING" }, "Reopened.")} />
+        <PrepareCommunicationButton sourceType="FOLLOW_UP_TASK" sourceId={record.id} templateType={record.type === "PAYMENT_PENDING" ? "PAYMENT_REMINDER" : record.type === "OVERDUE" ? "OVERDUE_REFILL" : "REFILL_REMINDER"} label="Prepare message" />
       </div>
       {record.activities?.[0] ? <p className="mt-3 text-xs leading-5 text-slate-500">Latest: {record.activities[0].description}</p> : null}
       {feedback ? <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">{feedback}</p> : null}

@@ -10,6 +10,7 @@ import {
   CreditCard,
   LineChart,
   MessageSquareWarning,
+  MessageSquareText,
   PackageCheck,
   RadioTower,
   ShoppingCart,
@@ -30,12 +31,14 @@ import {
   getStaffExecutionRanking
 } from "@/lib/accountability-intelligence";
 import { getEscalationAiSummary, getNotificationSummary } from "@/lib/notifications";
+import { getCommunicationMetrics } from "@/lib/communications";
 import { getEventMetrics, getEventNextAction, getEventReadinessSummary } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const data = await getDashboardData();
+  const communicationMetrics = await getCommunicationMetrics();
   const maxRevenue = Math.max(...data.revenueByBranch.map((branch) => branch.revenue), 1);
   const topUrgency = [...data.followUpUrgency].sort((a, b) => b.count - a.count)[0];
   const activePipeline = data.orderPipeline.filter((item) => item.count > 0);
@@ -129,6 +132,33 @@ export default async function DashboardPage() {
         <StatCard title="Overdue refill patients" value={String(data.overdueRefillPatients)} helper="Retention risk requiring follow-up" icon={<AlertTriangle className="h-5 w-5" />} tone="rose" trend="Risk" />
         <StatCard title="Pharmacist reviews" value={String(data.pendingPharmacistReviews)} helper="Orders waiting for clinical review" icon={<ClipboardCheck className="h-5 w-5" />} tone="amber" trend="Clinical" />
         <StatCard title="Active stock alerts" value={String(data.stockAlertCount)} helper="Low, expiry, dead, and overstock issues" icon={<PackageCheck className="h-5 w-5" />} trend="Stock" />
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="section-title">Communication Delivery</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy-950">Manual messages that move revenue and patient care</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{communicationMetrics.summary}</p>
+          </div>
+          <Link href="/communications" className="focus-ring rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white">Open Communication Center</Link>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <MiniExecMetric label="Ready to send" value={String(communicationMetrics.ready)} tone={communicationMetrics.ready > 0 ? "warn" : "normal"} />
+          <MiniExecMetric label="Sent today" value={String(communicationMetrics.sentToday)} tone="success" />
+          <MiniExecMetric label="Awaiting response" value={String(communicationMetrics.awaitingResponse)} tone={communicationMetrics.awaitingResponse > 0 ? "warn" : "normal"} />
+          <MiniExecMetric label="Follow-ups required" value={String(communicationMetrics.followUpsRequired)} tone={communicationMetrics.followUpsRequired > 0 ? "risk" : "normal"} />
+          <MiniExecMetric label="Response rate" value={`${communicationMetrics.responseRate}%`} />
+        </div>
+        <div className="mt-5 rounded-lg bg-clinical-50 p-4 ring-1 ring-clinical-100">
+          <div className="flex items-center gap-2 text-clinical-800">
+            <MessageSquareText className="h-4 w-4" aria-hidden="true" />
+            <p className="text-sm font-semibold">Next highest-value communication</p>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-clinical-900">
+            Prioritize ready chronic refill reminders and payment recovery messages before opening routine internal updates.
+          </p>
+        </div>
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">

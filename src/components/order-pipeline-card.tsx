@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, Clock3, DollarSign } from "lucide-react";
 import type { ReactNode } from "react";
 import { OrderStatusBadge } from "@/components/order-status-badge";
+import { PrepareCommunicationButton } from "@/components/prepare-communication-button";
 import { orderRevenueUrgency, orderSuggestedAction } from "@/lib/orders";
 import { enumLabel, formatCurrency, formatDateTime } from "@/lib/format";
 
@@ -48,10 +49,13 @@ export function OrderPipelineCard({
 
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
         <p className="text-xs text-slate-500">Owner: <span className="font-semibold text-slate-700">{order.assignedStaff?.name ?? "Unassigned"}</span></p>
-        <Link href={`/orders/${order.id}`} className="focus-ring inline-flex items-center gap-1.5 rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white">
-          Open
-          <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-        </Link>
+        <div className="flex flex-wrap justify-end gap-2">
+          <PrepareCommunicationButton sourceType="ORDER" sourceId={order.id} templateType={order.status === "AWAITING_PAYMENT" || order.status === "QUOTED" ? "ORDER_PAYMENT" : "ORDER_UPDATE"} label="Message" />
+          <Link href={`/orders/${order.id}`} className="focus-ring inline-flex items-center gap-1.5 rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white">
+            Open
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </Link>
+        </div>
       </div>
     </article>
   );

@@ -221,6 +221,57 @@ enum NotificationDeliveryStatus {
   FAILED
 }
 
+enum CommunicationChannel {
+  WHATSAPP
+  PHONE_CALL
+  SMS_READY
+  EMAIL_READY
+  IN_APP
+  OTHER
+}
+
+enum CommunicationStatus {
+  DRAFT
+  READY
+  OPENED
+  SENT
+  FAILED
+  RESPONDED
+  COMPLETED
+  CANCELLED
+}
+
+enum CommunicationDirection {
+  OUTBOUND
+  INBOUND
+}
+
+enum CommunicationRecipientType {
+  PATIENT
+  CUSTOMER
+  STAFF
+  BRANCH_MANAGER
+  SUPPLIER
+  COMPANY
+  EVENT_PARTNER
+  OTHER
+}
+
+enum CommunicationOutcomeType {
+  NO_RESPONSE
+  RESPONSE_RECEIVED
+  REFILL_CONFIRMED
+  DELIVERY_CONFIRMED
+  COLLECTION_CONFIRMED
+  PAYMENT_PROMISED
+  PAYMENT_RECEIVED
+  EVENT_ATTENDANCE_CONFIRMED
+  LEAD_CAPTURED
+  ISSUE_RESOLVED
+  CALLBACK_REQUIRED
+  OTHER
+}
+
 enum EventType {
   HEALTH_OUTREACH
   CORPORATE_ACTIVATION
@@ -299,6 +350,7 @@ model Branch {
   operationalActions OperationalAction[]
   notifications      Notification[]
   events             Event[]
+  communications     Communication[]
 }
 
 model StaffMember {
@@ -319,6 +371,7 @@ model StaffMember {
   notifications Notification[]
   ownedEvents    Event[]              @relation("EventOwner")
   eventChecklistItems EventChecklistItem[]
+  communications Communication[]
 }
 
 model Patient {
@@ -342,6 +395,7 @@ model Patient {
   refillEvents      RefillEvent[]
   followUpTasks     FollowUpTask[]
   orders            Order[]
+  communications     Communication[]
 }
 
 model PatientMedication {
@@ -394,6 +448,7 @@ model FollowUpTask {
   valueAmount      Decimal        @default(0) @db.Decimal(12, 2)
   lastContactedAt  DateTime?
   activities       FollowUpTaskActivity[]
+  communications   Communication[]
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 }
@@ -430,6 +485,7 @@ model Order {
   fulfillmentPreference String
   internalNotes         String?
   items                 OrderItem[]
+  communications         Communication[]
 }
 
 model OrderItem {
@@ -550,6 +606,7 @@ model OperationalAction {
   activities      OperationalActionActivity[]
   notifications   Notification[]
   eventChecklistItem EventChecklistItem?
+  communications  Communication[]
 
   @@index([status, dueDate])
   @@index([priority, status])
@@ -585,6 +642,7 @@ model Notification {
   metadata           Json?
   createdAt          DateTime                    @default(now())
   updatedAt          DateTime                    @updatedAt
+  communications      Communication[]
 
   @@index([status, severity])
   @@index([type, actionId, status])
@@ -644,6 +702,7 @@ model Event {
   expenses           EventExpense[]
   activities         EventActivity[]
   review             EventReview?
+  communications     Communication[]
 
   @@index([status, startDate])
   @@index([eventType])
@@ -720,4 +779,74 @@ model EventReview {
   mediaLinks              String?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
+}
+
+model Communication {
+  id                  String                         @id @default(cuid())
+  channel             CommunicationChannel           @default(WHATSAPP)
+  status              CommunicationStatus            @default(DRAFT)
+  direction           CommunicationDirection         @default(OUTBOUND)
+  recipientName       String
+  recipientPhone      String?
+  recipientType       CommunicationRecipientType     @default(OTHER)
+  message             String
+  subject             String?
+  sourceType          String
+  sourceId            String?
+  patientId           String?
+  patient             Patient?                       @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  orderId             String?
+  order               Order?                         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  followUpTaskId      String?
+  followUpTask        FollowUpTask?                  @relation(fields: [followUpTaskId], references: [id], onDelete: SetNull)
+  operationalActionId String?
+  operationalAction   OperationalAction?             @relation(fields: [operationalActionId], references: [id], onDelete: SetNull)
+  notificationId      String?
+  notification        Notification?                  @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+  eventId             String?
+  event               Event?                         @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  assignedStaffId     String?
+  assignedStaff       StaffMember?                   @relation(fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  branchId            String?
+  branch              Branch?                        @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  scheduledFor        DateTime?
+  openedAt            DateTime?
+  sentAt              DateTime?
+  failedAt            DateTime?
+  respondedAt         DateTime?
+  completedAt         DateTime?
+  responseText        String?
+  outcomeType         CommunicationOutcomeType?
+  outcomeNotes        String?
+  followUpRequired    Boolean                        @default(false)
+  followUpDate        DateTime?
+  externalReference   String?
+  metadata            Json?
+  createdAt           DateTime                       @default(now())
+  updatedAt           DateTime                       @updatedAt
+  activities          CommunicationActivity[]
+
+  @@index([status, createdAt])
+  @@index([channel, status])
+  @@index([sourceType, sourceId])
+  @@index([patientId])
+  @@index([orderId])
+  @@index([followUpTaskId])
+  @@index([operationalActionId])
+  @@index([notificationId])
+  @@index([eventId])
+  @@index([assignedStaffId])
+  @@index([branchId])
+}
+
+model CommunicationActivity {
+  id              String        @id @default(cuid())
+  communicationId String
+  communication   Communication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
+  activityType    String
+  description     String
+  actorName       String?
+  createdAt       DateTime      @default(now())
+
+  @@index([communicationId, createdAt])
 }
