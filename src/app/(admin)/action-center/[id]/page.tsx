@@ -77,8 +77,22 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
           status={action.status}
           priority={action.priority}
           dueDate={action.dueDate?.toISOString() ?? null}
+          branchId={action.branchId}
+          branchName={action.branch?.name ?? null}
+          category={action.category}
+          sourceType={action.sourceType}
           assignedStaffId={action.assignedStaffId}
-          staff={data.staff.map((member) => ({ id: member.id, name: member.name }))}
+          staff={data.staff.map((member) => ({ id: member.id, name: member.name, role: member.role, branchId: member.branchId, branchName: member.branch?.name ?? null }))}
+          actions={data.actions.map((item) => ({
+            id: item.id,
+            category: item.category,
+            sourceType: item.sourceType,
+            branchId: item.branchId,
+            branchName: item.branch?.name ?? null,
+            assignedStaffId: item.assignedStaffId,
+            status: item.status,
+            dueDate: item.dueDate?.toISOString() ?? null
+          }))}
           outcomeType={action.outcomeType}
           outcomeNotes={action.outcomeNotes}
           valueAmount={Number(action.valueAmount)}

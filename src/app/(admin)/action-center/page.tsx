@@ -118,7 +118,7 @@ export default async function ActionCenterPage() {
       <ActionCenterBoard
         initialActions={records}
         branches={branches.map((branch) => ({ id: branch.id, name: branch.name }))}
-        staff={staff.map((member) => ({ id: member.id, name: member.name, branchId: member.branchId }))}
+        staff={staff.map((member) => ({ id: member.id, name: member.name, role: member.role, branchId: member.branchId, branchName: member.branch?.name ?? null }))}
       />
     </div>
   );

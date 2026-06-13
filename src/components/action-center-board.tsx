@@ -3,6 +3,7 @@
 import { CheckCircle2, Loader2, Plus, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { getCompatibleAssignmentStaff, getRecommendedAssignee } from "@/lib/action-assignment";
 import { enumLabel, formatCurrency, formatDate, dateInputValue } from "@/lib/format";
 
 export type ActionCenterRecord = {
@@ -32,7 +33,9 @@ export type ActionCenterRecord = {
 export type ActionOption = {
   id: string;
   name: string;
+  role?: string | null;
   branchId?: string | null;
+  branchName?: string | null;
 };
 
 const categories = ["CHRONIC_PATIENT", "ORDER_RECOVERY", "STOCK_INTERVENTION", "BRANCH_ISSUE", "PILOT_TASK", "MANAGEMENT_DECISION", "GENERAL"];
@@ -115,6 +118,15 @@ export function ActionCenterBoard({
     setBusyId(id);
     setError("");
     setFeedback("");
+    const previousActions = actions;
+    if ("assignedStaffId" in payload) {
+      const nextStaff = payload.assignedStaffId ? staff.find((member) => member.id === payload.assignedStaffId) : null;
+      setActions((current) => current.map((action) => action.id === id ? {
+        ...action,
+        assignedStaffId: payload.assignedStaffId,
+        assignedStaffName: nextStaff?.name ?? null
+      } : action));
+    }
     const response = await fetch(`/api/operational-actions/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -124,6 +136,7 @@ export function ActionCenterBoard({
 
     if (!response.ok) {
       const result = await response.json().catch(() => ({ error: "Action could not be updated." }));
+      setActions(previousActions);
       setError(result.error ?? "Action could not be updated.");
       return false;
     }
@@ -172,11 +185,11 @@ export function ActionCenterBoard({
 
       {actions.length === 0 ? <EmptyState onCreate={() => setShowCreate(true)} /> : null}
 
-      <QueueSection title="Critical and overdue" eyebrow="Clear first" actions={grouped.criticalOverdue} busyId={busyId} branches={branches} staff={staff} onUpdate={updateAction} />
-      <QueueSection title="Due today" eyebrow="Today's execution" actions={grouped.dueToday} busyId={busyId} branches={branches} staff={staff} onUpdate={updateAction} />
-      <QueueSection title="In progress" eyebrow="Active work" actions={grouped.inProgress} busyId={busyId} branches={branches} staff={staff} onUpdate={updateAction} />
-      <QueueSection title="Upcoming" eyebrow="Next actions" actions={grouped.upcoming} busyId={busyId} branches={branches} staff={staff} onUpdate={updateAction} />
-      <QueueSection title="Recently completed" eyebrow="Recorded outcomes" actions={grouped.recentlyCompleted} busyId={busyId} branches={branches} staff={staff} onUpdate={updateAction} />
+      <QueueSection title="Critical and overdue" eyebrow="Clear first" actions={grouped.criticalOverdue} allActions={actions} busyId={busyId} branches={branches} staff={staff} onUpdate={updateAction} />
+      <QueueSection title="Due today" eyebrow="Today's execution" actions={grouped.dueToday} allActions={actions} busyId={busyId} branches={branches} staff={staff} onUpdate={updateAction} />
+      <QueueSection title="In progress" eyebrow="Active work" actions={grouped.inProgress} allActions={actions} busyId={busyId} branches={branches} staff={staff} onUpdate={updateAction} />
+      <QueueSection title="Upcoming" eyebrow="Next actions" actions={grouped.upcoming} allActions={actions} busyId={busyId} branches={branches} staff={staff} onUpdate={updateAction} />
+      <QueueSection title="Recently completed" eyebrow="Recorded outcomes" actions={grouped.recentlyCompleted} allActions={actions} busyId={busyId} branches={branches} staff={staff} onUpdate={updateAction} />
     </div>
   );
 }
@@ -235,6 +248,10 @@ function branchLabelMap(options: ActionOption[]) {
   return Object.fromEntries(options.map((option) => [option.id, option.name]));
 }
 
+function staffLabelMap(options: ActionOption[]) {
+  return Object.fromEntries(options.map((option) => [option.id, `${option.name}${option.role ? ` - ${option.role}` : ""}`]));
+}
+
 function CreateActionForm({ branches, staff, busy, onSubmit }: { branches: ActionOption[]; staff: ActionOption[]; busy: boolean; onSubmit: (formData: FormData) => Promise<void> }) {
   return (
     <form action={onSubmit} className="mt-5 rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
@@ -244,7 +261,7 @@ function CreateActionForm({ branches, staff, busy, onSubmit }: { branches: Actio
         <Select label="Priority" name="priority" options={priorities} required />
         <Field label="Due date" name="dueDate" type="date" />
         <Select label="Branch" name="branchId" options={branches.map((branch) => branch.id)} labels={branchLabelMap(branches)} />
-        <Select label="Assigned staff" name="assignedStaffId" options={staff.map((member) => member.id)} labels={branchLabelMap(staff)} />
+        <Select label="Assigned staff" name="assignedStaffId" options={staff.map((member) => member.id)} labels={staffLabelMap(staff)} />
         <Field label="Source type" name="sourceType" defaultValue="MANUAL" />
         <Field label="Estimated value" name="valueAmount" type="number" min="0" defaultValue="0" />
       </div>
@@ -260,7 +277,7 @@ function CreateActionForm({ branches, staff, busy, onSubmit }: { branches: Actio
   );
 }
 
-function QueueSection({ title, eyebrow, actions, busyId, branches, staff, onUpdate }: { title: string; eyebrow: string; actions: ActionCenterRecord[]; busyId: string; branches: ActionOption[]; staff: ActionOption[]; onUpdate: (id: string, payload: Record<string, string | null>, message: string) => Promise<boolean> }) {
+function QueueSection({ title, eyebrow, actions, allActions, busyId, branches, staff, onUpdate }: { title: string; eyebrow: string; actions: ActionCenterRecord[]; allActions: ActionCenterRecord[]; busyId: string; branches: ActionOption[]; staff: ActionOption[]; onUpdate: (id: string, payload: Record<string, string | null>, message: string) => Promise<boolean> }) {
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -272,16 +289,18 @@ function QueueSection({ title, eyebrow, actions, busyId, branches, staff, onUpda
       </div>
       <div className="mt-5 grid gap-4">
         {actions.length > 0 ? actions.map((action) => (
-          <ActionCard key={action.id} action={action} busy={busyId === action.id} branches={branches} staff={staff} onUpdate={onUpdate} />
+          <ActionCard key={action.id} action={action} busy={busyId === action.id} branches={branches} staff={staff} actions={allActions} onUpdate={onUpdate} />
         )) : <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-5 text-sm leading-6 text-slate-600">No actions in this lane. Create one from an operating insight, patient risk, order blocker, stock issue, or pilot task.</p>}
       </div>
     </section>
   );
 }
 
-function ActionCard({ action, busy, staff, onUpdate }: { action: ActionCenterRecord; busy: boolean; branches: ActionOption[]; staff: ActionOption[]; onUpdate: (id: string, payload: Record<string, string | null>, message: string) => Promise<boolean> }) {
+function ActionCard({ action, busy, staff, actions, onUpdate }: { action: ActionCenterRecord; busy: boolean; branches: ActionOption[]; staff: ActionOption[]; actions: ActionCenterRecord[]; onUpdate: (id: string, payload: Record<string, string | null>, message: string) => Promise<boolean> }) {
   const [completion, setCompletion] = useState({ outcomeType: action.outcomeType ?? "REVENUE_PROTECTED", outcomeNotes: action.outcomeNotes ?? "", valueAmount: String(action.valueAmount ?? 0) });
-  const compatibleStaff = action.branchId ? staff.filter((member) => !member.branchId || member.branchId === action.branchId || member.id === action.assignedStaffId) : staff;
+  const compatibleStaff = getCompatibleAssignmentStaff(action, staff);
+  const recommendation = getRecommendedAssignee(action, staff, actions);
+  const selectedStaffVisible = !action.assignedStaffId || compatibleStaff.some((member) => member.id === action.assignedStaffId);
 
   return (
     <article className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -309,9 +328,34 @@ function ActionCard({ action, busy, staff, onUpdate }: { action: ActionCenterRec
 
       <p className="mt-4 rounded-lg bg-white p-3 text-sm font-semibold leading-6 text-clinical-900 ring-1 ring-clinical-100">{action.suggestedNextStep}</p>
 
+      <div className="mt-4 rounded-lg bg-white p-3 ring-1 ring-clinical-100">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-clinical-700">Assignment recommendation</p>
+            <p className="mt-1 text-sm font-semibold text-navy-950">
+              Recommended: {recommendation.staff?.name ?? "No branch staff configured"}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-slate-600">{recommendation.reason}</p>
+          </div>
+          {recommendation.staff ? (
+            <button type="button" disabled={busy || action.assignedStaffId === recommendation.staff.id} onClick={() => onUpdate(action.id, { assignedStaffId: recommendation.staff!.id }, `Assigned recommended owner: ${recommendation.staff!.name}.`)} className="focus-ring rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-navy-800 disabled:opacity-50">
+              Assign recommended
+            </button>
+          ) : (
+            <Link href="/settings" className="focus-ring rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">Configure staff</Link>
+          )}
+        </div>
+        {action.branchId && recommendation.branchStaffCount === 0 ? (
+          <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 ring-1 ring-amber-100">No staff members are configured for this branch.</p>
+        ) : null}
+        {!selectedStaffVisible ? (
+          <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800 ring-1 ring-rose-100">Current assignee is outside this branch. Choose a branch staff member or clear the assignment.</p>
+        ) : null}
+      </div>
+
       <div className="mt-4 grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="grid gap-2 sm:grid-cols-2">
-          <SelectSmall label="Assign" value={action.assignedStaffId ?? ""} options={compatibleStaff.map((member) => member.id)} labels={branchLabelMap(compatibleStaff)} onChange={(value) => onUpdate(action.id, { assignedStaffId: value || null }, value ? "Assignment updated." : "Assignment cleared.")} disabled={busy} />
+          <SelectSmall label="Assign" value={selectedStaffVisible ? action.assignedStaffId ?? "" : ""} options={compatibleStaff.map((member) => member.id)} labels={staffLabelMap(compatibleStaff)} helper={action.branchId && compatibleStaff.length === 0 ? "No staff members are configured for this branch." : undefined} onChange={(value) => onUpdate(action.id, { assignedStaffId: value || null }, value ? "Assignment updated." : "Assignment cleared.")} disabled={busy} />
           <SelectSmall label="Priority" value={action.priority} options={priorities} onChange={(value) => onUpdate(action.id, { priority: value }, "Priority updated.")} disabled={busy} />
           <FieldSmall label="Due date" type="date" value={action.dueDate ? dateInputValue(action.dueDate) : ""} onChange={(value) => onUpdate(action.id, { dueDate: value }, "Due date updated.")} disabled={busy} />
           <div className="flex flex-wrap items-end gap-2">
@@ -380,7 +424,7 @@ function Select({ label, name, options, labels, required = false }: { label: str
   );
 }
 
-function SelectSmall({ label, value, options, labels, onChange, disabled }: { label: string; value: string; options: string[]; labels?: Record<string, string>; onChange: (value: string) => Promise<boolean>; disabled: boolean }) {
+function SelectSmall({ label, value, options, labels, helper, onChange, disabled }: { label: string; value: string; options: string[]; labels?: Record<string, string>; helper?: string; onChange: (value: string) => Promise<boolean>; disabled: boolean }) {
   const [localValue, setLocalValue] = useState(value);
 
   useEffect(() => {
@@ -401,6 +445,7 @@ function SelectSmall({ label, value, options, labels, onChange, disabled }: { la
         <option value="">None</option>
         {options.map((option) => <option key={option} value={option}>{labels?.[option] ?? enumLabel(option)}</option>)}
       </select>
+      {helper ? <span className="mt-1 block text-[11px] font-semibold text-amber-700">{helper}</span> : null}
     </label>
   );
 }
