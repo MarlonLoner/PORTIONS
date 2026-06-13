@@ -10,6 +10,7 @@ import Link from "next/link";
 import { FollowUpTaskCard } from "@/components/follow-up-task-card";
 import { StatCard } from "@/components/stat-card";
 import { estimateMonthlyPatientValue } from "@/lib/chronic";
+import { serializeFollowUpTaskForClient } from "@/lib/follow-up-serialization";
 import { daysFromNow, formatCurrency } from "@/lib/format";
 import { getFollowUpQueueData } from "@/lib/data";
 
@@ -17,6 +18,8 @@ export const dynamic = "force-dynamic";
 
 export default async function FollowUpsPage() {
   const { tasks, staff, completedThisWeek } = await getFollowUpQueueData();
+  const staffOptions = staff.map((member) => ({ id: member.id, name: member.name, role: member.role, branchId: member.branchId, branchName: member.branch?.name ?? null }));
+  const workloadTasks = tasks.map((item) => ({ id: item.id, branchId: item.branchId, assignedStaffId: item.assignedStaffId, status: item.status, dueDate: item.dueDate.toISOString() }));
   const activeTasks = tasks.filter((task) => task.status !== "DONE" && task.status !== "CANCELLED");
   const tasksDueToday = activeTasks.filter((task) => daysFromNow(task.dueDate) === 0 && !isSnoozedFuture(task)).length;
   const overdueTasks = activeTasks.filter((task) => (daysFromNow(task.dueDate) < 0 || task.type === "OVERDUE") && !isSnoozedFuture(task)).length;
@@ -101,7 +104,7 @@ export default async function FollowUpsPage() {
               </div>
               <div className="grid gap-3">
                 {group.length > 0 ? (
-                  group.map((task) => <FollowUpTaskCard key={task.id} task={task} staff={staff.map((member) => ({ id: member.id, name: member.name, role: member.role, branchId: member.branchId, branchName: member.branch?.name ?? null }))} allTasks={tasks.map((item) => ({ id: item.id, branchId: item.branchId, assignedStaffId: item.assignedStaffId, status: item.status, dueDate: item.dueDate.toISOString() }))} />)
+                  group.map((task) => <FollowUpTaskCard key={task.id} task={serializeFollowUpTaskForClient(task)} staff={staffOptions} allTasks={workloadTasks} />)
                 ) : (
                   <div className="rounded-lg border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-500">
                     No active tasks in this queue.

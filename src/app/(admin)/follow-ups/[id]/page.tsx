@@ -3,6 +3,7 @@ import { ArrowLeft, History, MessageSquareReply, Pill, UserRound } from "lucide-
 import Link from "next/link";
 import { FollowUpTaskCard } from "@/components/follow-up-task-card";
 import { StatusBadge } from "@/components/status-badge";
+import { serializeFollowUpTaskForClient } from "@/lib/follow-up-serialization";
 import { enumLabel, formatCurrency, formatDateTime } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 
@@ -51,7 +52,7 @@ export default async function FollowUpDetailPage({ params }: { params: Promise<{
 
       <section className="grid gap-5 xl:grid-cols-[1fr_0.8fr]">
         <FollowUpTaskCard
-          task={task}
+          task={serializeFollowUpTaskForClient(task)}
           staff={staff.map((member) => ({ id: member.id, name: member.name, role: member.role, branchId: member.branchId, branchName: member.branch?.name ?? null }))}
           allTasks={allTasks.map((item) => ({ id: item.id, branchId: item.branchId, assignedStaffId: item.assignedStaffId, status: item.status, dueDate: item.dueDate.toISOString() }))}
         />

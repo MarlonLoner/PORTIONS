@@ -24,7 +24,7 @@ export function estimateMonthlyPatientValue(patient: {
 
 export function isPatientOverdue(patient: {
   status: PatientStatus | string;
-  nextRefillDate: Date;
+  nextRefillDate: Date | string;
 }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -34,13 +34,14 @@ export function isPatientOverdue(patient: {
   return patient.status === PatientStatus.OVERDUE || refill < today;
 }
 
-export function isPatientDueToday(patient: { nextRefillDate: Date }) {
+export function isPatientDueToday(patient: { nextRefillDate: Date | string }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
+  const refill = new Date(patient.nextRefillDate);
 
-  return patient.nextRefillDate >= today && patient.nextRefillDate < tomorrow;
+  return refill >= today && refill < tomorrow;
 }
 
 export function isHighRisk(patient: { riskScore: RiskScore | string }) {
@@ -52,10 +53,11 @@ export function chronicActionCopy(patient: {
   conditionCategory: string;
   status: PatientStatus | string;
   riskScore: RiskScore | string;
-  nextRefillDate: Date;
+  nextRefillDate: Date | string;
 }) {
   const firstName = patient.name.split(" ")[0];
-  const daysOverdue = Math.max(0, Math.floor((Date.now() - patient.nextRefillDate.getTime()) / 86_400_000));
+  const refillDate = new Date(patient.nextRefillDate);
+  const daysOverdue = Math.max(0, Math.floor((Date.now() - refillDate.getTime()) / 86_400_000));
 
   if (isPatientOverdue(patient)) {
     return `This patient is ${daysOverdue || 1} days overdue on a ${patient.conditionCategory.toLowerCase()} refill. Contact today and offer delivery or branch collection before marking as lost.`;

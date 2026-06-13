@@ -1,5 +1,6 @@
 import { FollowUpOutcomeType, FollowUpStatus, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { serializeFollowUpTaskForClient } from "@/lib/follow-up-serialization";
 import { resolveNotificationsForSource } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 
@@ -164,7 +165,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           activities: { orderBy: { createdAt: "desc" } }
         }
       });
-      return NextResponse.json(current);
+      if (!current) return NextResponse.json({ error: "Follow-up task was not found." }, { status: 404 });
+      return NextResponse.json(serializeFollowUpTaskForClient(current));
     }
 
     const updated = await prisma.$transaction(async (tx) => tx.followUpTask.update({
@@ -185,7 +187,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       await resolveNotificationsForSource({ sourceType: "FOLLOW_UP_TASK", sourceId: updated.id }).catch(() => 0);
     }
 
-    return NextResponse.json(updated);
+    return NextResponse.json(serializeFollowUpTaskForClient(updated));
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
       return NextResponse.json({ error: "Follow-up task was not found." }, { status: 404 });

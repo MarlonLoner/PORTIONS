@@ -67,7 +67,7 @@ export function FollowUpTaskCard({ task, staff, allTasks }: { task: FollowUpTask
   const overdue = dueDistance < 0 || record.type === "OVERDUE";
   const highRisk = record.patient?.riskScore === "HIGH";
   const estimatedValue = record.patient ? estimateMonthlyPatientValue(record.patient) : Number(record.valueAmount ?? 0);
-  const operationalSuggestion = record.patient ? chronicActionCopy(record.patient as any) : pharmacySuggestion(record.type, record.customerName);
+  const operationalSuggestion = record.patient ? chronicActionCopy(record.patient) : pharmacySuggestion(record.type, record.customerName);
   const branchName = record.branch?.name ?? "Unassigned branch";
   const compatibleStaff = record.branchId ? staff.filter((member) => member.branchId === record.branchId) : [];
   const recommended = useMemo(() => recommendStaff(record, compatibleStaff, allTasks), [record, compatibleStaff, allTasks]);
