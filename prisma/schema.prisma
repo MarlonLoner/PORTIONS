@@ -210,6 +210,66 @@ enum NotificationDeliveryStatus {
   FAILED
 }
 
+enum EventType {
+  HEALTH_OUTREACH
+  CORPORATE_ACTIVATION
+  CONFERENCE
+  EXHIBITION
+  BRANCH_PROMOTION
+  SUPPLIER_EVENT
+  COMMUNITY_EVENT
+  PRODUCT_LAUNCH
+  TRAINING
+  WELLNESS_DAY
+  OTHER
+}
+
+enum EventStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  FUNDING_PENDING
+  FUNDED
+  PREPARATION
+  READY
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum EventPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum FundingStatus {
+  NOT_REQUESTED
+  REQUESTED
+  PARTIALLY_FUNDED
+  FUNDED
+  OVER_BUDGET
+  CLOSED
+}
+
+enum EventChecklistStatus {
+  PENDING
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  NOT_REQUIRED
+}
+
+enum EventExpenseStatus {
+  PLANNED
+  REQUESTED
+  APPROVED
+  PAID
+  REJECTED
+}
+
 model Branch {
   id                 String         @id @default(cuid())
   name               String         @unique
@@ -227,6 +287,7 @@ model Branch {
   stockItems         StockItem[]
   operationalActions OperationalAction[]
   notifications      Notification[]
+  events             Event[]
 }
 
 model StaffMember {
@@ -245,6 +306,8 @@ model StaffMember {
   refillEvents  RefillEvent[]
   operationalActions OperationalAction[]
   notifications Notification[]
+  ownedEvents    Event[]              @relation("EventOwner")
+  eventChecklistItems EventChecklistItem[]
 }
 
 model Patient {
@@ -528,4 +591,118 @@ model OperationalActionActivity {
   createdAt    DateTime          @default(now())
 
   @@index([actionId, createdAt])
+}
+
+model Event {
+  id                 String        @id @default(cuid())
+  title              String
+  description        String
+  eventType          EventType
+  status             EventStatus   @default(DRAFT)
+  priority           EventPriority @default(MEDIUM)
+  companyName        String?
+  venueName          String?
+  location           String?
+  branchId           String?
+  branch             Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  ownerStaffId       String?
+  ownerStaff         StaffMember?  @relation("EventOwner", fields: [ownerStaffId], references: [id], onDelete: SetNull)
+  startDate          DateTime
+  endDate            DateTime
+  expectedAttendance Int?
+  actualAttendance   Int?
+  objective          String
+  expectedOutcome    String?
+  proposedBudget     Decimal?      @db.Decimal(12, 2)
+  approvedBudget     Decimal?      @db.Decimal(12, 2)
+  fundsReleased      Decimal?      @db.Decimal(12, 2)
+  actualSpend        Decimal?      @db.Decimal(12, 2)
+  revenueGenerated   Decimal?      @db.Decimal(12, 2)
+  leadsGenerated     Int?
+  patientsRegistered Int?
+  fundingStatus      FundingStatus @default(NOT_REQUESTED)
+  approvalNotes      String?
+  rejectionReason    String?
+  approvedAt         DateTime?
+  approvedBy         String?
+  completedAt        DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  checklistItems     EventChecklistItem[]
+  expenses           EventExpense[]
+  activities         EventActivity[]
+  review             EventReview?
+
+  @@index([status, startDate])
+  @@index([eventType])
+  @@index([branchId])
+  @@index([ownerStaffId])
+  @@index([fundingStatus])
+}
+
+model EventChecklistItem {
+  id              String               @id @default(cuid())
+  eventId         String
+  event           Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  category        String
+  title           String
+  description     String?
+  assignedStaffId String?
+  assignedStaff   StaffMember?         @relation(fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  dueDate         DateTime?
+  status          EventChecklistStatus @default(PENDING)
+  completedAt     DateTime?
+  notes           String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([eventId, status])
+  @@index([assignedStaffId])
+}
+
+model EventExpense {
+  id               String             @id @default(cuid())
+  eventId          String
+  event            Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  category         String
+  description      String
+  supplier         String?
+  amount           Decimal            @db.Decimal(12, 2)
+  status           EventExpenseStatus @default(PLANNED)
+  paymentReference String?
+  paidAt           DateTime?
+  notes            String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([eventId, status])
+}
+
+model EventActivity {
+  id           String   @id @default(cuid())
+  eventId      String
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  activityType String
+  description  String
+  actorName    String?
+  createdAt    DateTime @default(now())
+
+  @@index([eventId, createdAt])
+}
+
+model EventReview {
+  id                      String   @id @default(cuid())
+  eventId                 String   @unique
+  event                   Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  attendance              Int
+  leadsGenerated          Int
+  revenueGenerated        Decimal  @default(0) @db.Decimal(12, 2)
+  patientsRegistered      Int
+  whatWorked              String
+  whatFailed              String
+  lessonsLearned          String
+  nextTimeRecommendations String
+  mediaLinks              String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 }
