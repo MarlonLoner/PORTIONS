@@ -22,6 +22,7 @@ export default async function UsersAdminPage() {
   const active = users.filter((user) => user.status === UserStatus.ACTIVE).length;
   const adminRoles: UserRole[] = [UserRole.OWNER, UserRole.CEO, UserRole.SYSTEM_ADMIN];
   const admins = users.filter((user) => adminRoles.includes(user.role)).length;
+  const firstRun = admins <= 1 && users.length <= 2;
 
   return (
     <div className="space-y-6">
@@ -49,6 +50,30 @@ export default async function UsersAdminPage() {
         <Metric icon={<KeyRound className="h-5 w-5" />} label="Admin-level users" value={String(admins)} />
       </section>
 
+      {firstRun ? (
+        <section className="rounded-lg border border-clinical-200 bg-clinical-50 p-5 shadow-soft">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-800">First-run onboarding</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy-950">Build the operating team</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-clinical-900">
+            The first administrator is active. Create operational users next, then confirm units and WhatsApp numbers before handing the system to branch teams.
+          </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              ["Create General Manager", "/admin/users/new"],
+              ["Create Branch Manager", "/admin/users/new"],
+              ["Create Online Orders Agent", "/admin/users/new"],
+              ["Create Finance Admin", "/admin/users/new"],
+              ["Configure operating units", "/admin/operating-units"],
+              ["Add WhatsApp numbers", "/admin/operating-units"],
+              ["Review role permissions", "/account"],
+              ["Confirm your account", "/account"]
+            ].map(([label, href]) => (
+              <Link key={label} href={href} className="focus-ring rounded-lg bg-white p-3 text-sm font-semibold text-navy-950 ring-1 ring-clinical-100">{label}</Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
         <div className="grid gap-4">
           {users.map((user) => (
@@ -67,6 +92,7 @@ export default async function UsersAdminPage() {
                 <Mini label="Primary unit" value={user.primaryOperatingUnit?.name ?? "None"} />
                 <Mini label="Staff link" value={user.staffMember?.name ?? "Not linked"} />
                 <Mini label="Unit access" value={String(user.unitAccess.length)} />
+                <Mini label="Password change" value={user.mustChangePassword ? "Required" : "No"} />
                 <Mini label="Last login" value={user.lastLoginAt ? formatDate(user.lastLoginAt) : "Not recorded"} />
               </div>
             </article>

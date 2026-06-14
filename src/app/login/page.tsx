@@ -2,8 +2,13 @@ import { ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { LoginForm } from "@/components/login-form";
+import { hasActiveAdministrativeUser } from "@/lib/auth";
 
-export default function LoginPage() {
+export const dynamic = "force-dynamic";
+
+export default async function LoginPage() {
+  const initialized = await hasActiveAdministrativeUser();
+
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-10">
       <section className="mx-auto grid min-h-[calc(100vh-5rem)] max-w-6xl items-center gap-8 lg:grid-cols-[1.05fr_0.95fr]">
@@ -27,6 +32,12 @@ export default function LoginPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-700">PORTIONS Account</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy-950">Email and password</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">Use your assigned PORTIONS account. Demo walkthroughs can still use the existing demo access code.</p>
+          {!initialized ? (
+            <div className="mt-5 rounded-lg bg-amber-50 p-4 ring-1 ring-amber-100">
+              <p className="text-sm font-semibold text-amber-900">PORTIONS has not been initialized yet.</p>
+              <Link href="/setup" className="focus-ring mt-3 inline-flex rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white">Initialize system</Link>
+            </div>
+          ) : null}
           <Suspense fallback={<div className="mt-6 h-48 rounded-lg bg-slate-50 ring-1 ring-slate-200" />}>
             <LoginForm />
           </Suspense>

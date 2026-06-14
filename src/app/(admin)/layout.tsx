@@ -39,6 +39,9 @@ export default async function AdminLayout({
   const user = await getCurrentAccessUser();
   if (!user) redirect("/login");
   const pathname = (await headers()).get("x-pathname") ?? "";
+  if (!user.isDemo && user.mustChangePassword && pathname !== "/account/change-password") {
+    redirect("/account/change-password");
+  }
   if (pathname && !canViewPage(user, pathname)) redirect("/access-denied");
   const visibleHrefs = shellHrefs.filter((href) => canViewPage(user, href));
 

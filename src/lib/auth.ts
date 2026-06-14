@@ -47,6 +47,7 @@ export type CurrentUser = {
   email: string;
   role: UserRole;
   status: UserStatus;
+  mustChangePassword: boolean;
   isDemo: boolean;
   primaryOperatingUnitId: string | null;
   primaryOperatingUnitName: string | null;
@@ -124,6 +125,26 @@ export function verifyPassword(password: string, storedHash: string) {
   const actual = Buffer.from(scryptSync(password, salt, 64).toString("hex"), "hex");
   const expected = Buffer.from(hash, "hex");
   return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+export function validatePasswordStrength(password: string) {
+  if (password.length < 12) return "Password must be at least 12 characters.";
+  if (!/[A-Z]/.test(password)) return "Password must include an uppercase letter.";
+  if (!/[a-z]/.test(password)) return "Password must include a lowercase letter.";
+  if (!/[0-9]/.test(password)) return "Password must include a number.";
+  if (!/[^A-Za-z0-9]/.test(password)) return "Password must include a special character.";
+  return "";
+}
+
+export async function hasActiveAdministrativeUser(tx: Pick<typeof prisma, "appUser"> = prisma) {
+  const admin = await tx.appUser.findFirst({
+    where: {
+      status: UserStatus.ACTIVE,
+      role: { in: [UserRole.OWNER, UserRole.CEO, UserRole.SYSTEM_ADMIN] }
+    },
+    select: { id: true }
+  });
+  return Boolean(admin);
 }
 
 export function hashSessionToken(token: string) {
@@ -210,6 +231,7 @@ export function getDemoUser(): CurrentUser {
     email: "demo@portions.local",
     role: UserRole.OWNER,
     status: UserStatus.ACTIVE,
+    mustChangePassword: false,
     isDemo: true,
     primaryOperatingUnitId: null,
     primaryOperatingUnitName: "Demo Network",
@@ -333,6 +355,7 @@ function toCurrentUser(user: any): CurrentUser {
     email: user.email,
     role: user.role,
     status: user.status,
+    mustChangePassword: Boolean(user.mustChangePassword),
     isDemo: false,
     primaryOperatingUnitId: user.primaryOperatingUnitId,
     primaryOperatingUnitName: user.primaryOperatingUnit?.name ?? null,

@@ -38,7 +38,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
     await requirePermission("manageUsers");
     const password = String(formData.get("password") ?? "");
     if (password.length < 10) throw new Error("Password must be at least 10 characters.");
-    await prisma.appUser.update({ where: { id }, data: { passwordHash: hashPassword(password), failedLoginCount: 0, lockedUntil: null } });
+    await prisma.appUser.update({ where: { id }, data: { passwordHash: hashPassword(password), mustChangePassword: true, failedLoginCount: 0, lockedUntil: null } });
     await prisma.appSession.deleteMany({ where: { userId: id } });
     redirect(`/admin/users/${id}`);
   }
@@ -115,6 +115,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-700">Security summary</p>
           <div className="mt-4 grid gap-3">
             <Mini label="Failed logins" value={String(user.failedLoginCount)} />
+            <Mini label="Password change" value={user.mustChangePassword ? "Required on next login" : "Not required"} />
             <Mini label="Locked until" value={user.lockedUntil ? formatDate(user.lockedUntil) : "Not locked"} />
             <Mini label="Last login" value={user.lastLoginAt ? formatDate(user.lastLoginAt) : "Not recorded"} />
             <Mini label="Staff member" value={user.staffMember?.name ?? "Not linked"} />
