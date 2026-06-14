@@ -236,21 +236,63 @@ FROM "OperatingUnit" ou
 WHERE ou."branchId" = o."branchId";
 
 -- Attach existing communications to the safest sending unit context.
-UPDATE "Communication" c
+-- Use a derived table so the target alias is not referenced inside FROM/JOIN ON clauses.
+UPDATE "Communication" AS c
 SET
-  "sendingOperatingUnitId" = COALESCE(
-    CASE WHEN c."sourceType" = 'ORDER' AND o."originatingOperatingUnitId" IS NOT NULL THEN o."originatingOperatingUnitId" END,
-    ou."id"
-  ),
-  "sendingWhatsappNumber" = COALESCE(
-    CASE WHEN c."sourceType" = 'ORDER' AND online."id" IS NOT NULL THEN online."whatsappNumber" END,
-    ou."whatsappNumber"
-  ),
-  "sendingContactLabel" = COALESCE(
-    CASE WHEN c."sourceType" = 'ORDER' AND online."id" IS NOT NULL THEN online."contactLabel" END,
-    ou."contactLabel"
-  )
-FROM "OperatingUnit" ou
-LEFT JOIN "Order" o ON o."id" = c."orderId"
-LEFT JOIN "OperatingUnit" online ON online."id" = 'ou_online_department'
-WHERE ou."branchId" = c."branchId";
+  "sendingOperatingUnitId" = COALESCE(c."sendingOperatingUnitId", resolved."operatingUnitId"),
+  "sendingWhatsappNumber" = COALESCE(c."sendingWhatsappNumber", resolved."whatsappNumber"),
+  "sendingContactLabel" = COALESCE(c."sendingContactLabel", resolved."contactLabel")
+FROM (
+  SELECT
+    c2."id" AS "communicationId",
+    COALESCE(
+      CASE
+        WHEN c2."sourceType" = 'ORDER'
+          AND o."source" IN ('WHATSAPP', 'WEBSITE', 'APP', 'DIASPORA')
+          THEN online."id"
+      END,
+      CASE
+        WHEN c2."sourceType" = 'ORDER'
+          THEN order_unit."id"
+      END,
+      branch_unit."id",
+      online."id"
+    ) AS "operatingUnitId",
+    COALESCE(
+      CASE
+        WHEN c2."sourceType" = 'ORDER'
+          AND o."source" IN ('WHATSAPP', 'WEBSITE', 'APP', 'DIASPORA')
+          THEN online."whatsappNumber"
+      END,
+      CASE
+        WHEN c2."sourceType" = 'ORDER'
+          THEN order_unit."whatsappNumber"
+      END,
+      branch_unit."whatsappNumber",
+      online."whatsappNumber"
+    ) AS "whatsappNumber",
+    COALESCE(
+      CASE
+        WHEN c2."sourceType" = 'ORDER'
+          AND o."source" IN ('WHATSAPP', 'WEBSITE', 'APP', 'DIASPORA')
+          THEN online."contactLabel"
+      END,
+      CASE
+        WHEN c2."sourceType" = 'ORDER'
+          THEN order_unit."contactLabel"
+      END,
+      branch_unit."contactLabel",
+      online."contactLabel"
+    ) AS "contactLabel"
+  FROM "Communication" AS c2
+  LEFT JOIN "Order" AS o ON o."id" = c2."orderId"
+  LEFT JOIN "OperatingUnit" AS order_unit ON order_unit."id" = o."originatingOperatingUnitId"
+  LEFT JOIN "OperatingUnit" AS branch_unit ON branch_unit."branchId" = c2."branchId"
+  LEFT JOIN "OperatingUnit" AS online ON online."isPrimaryOnlineUnit" = true
+) AS resolved
+WHERE resolved."communicationId" = c."id"
+  AND (
+    c."sendingOperatingUnitId" IS NULL
+    OR c."sendingWhatsappNumber" IS NULL
+    OR c."sendingContactLabel" IS NULL
+  );
