@@ -27,6 +27,10 @@ export type CommunicationRecord = {
   assignedStaff?: { id: string; name: string; role: string } | null;
   branchId: string | null;
   branch?: { id: string; name: string } | null;
+  sendingOperatingUnitId: string | null;
+  sendingOperatingUnit?: { id: string; name: string; contactLabel: string | null; whatsappNumber: string | null } | null;
+  sendingWhatsappNumber: string | null;
+  sendingContactLabel: string | null;
   openedAt: string | null;
   sentAt: string | null;
   respondedAt: string | null;
@@ -245,15 +249,19 @@ function CommunicationCard({
           <Badge label={enumLabel(communication.sourceType)} className="bg-white text-slate-700 ring-slate-200" />
         </div>
       </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
         <Mini label="Phone" value={communication.recipientPhone ?? "Phone required"} tone={communication.recipientPhone ? "normal" : "risk"} />
         <Mini label="Branch" value={communication.branch?.name ?? "Network"} />
+        <Mini label="Send from" value={communication.sendingContactLabel ?? communication.sendingOperatingUnit?.name ?? "Not configured"} tone={communication.sendingWhatsappNumber ? "normal" : "risk"} />
         <Mini label="Sender" value={communication.assignedStaff?.name ?? "Unassigned"} />
         <Mini label="Created" value={formatDateTime(communication.createdAt)} />
         <Mini label="Outcome" value={communication.outcomeType ? enumLabel(communication.outcomeType) : "Not recorded"} />
       </div>
       {!communication.recipientPhone ? (
         <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm font-semibold leading-6 text-amber-800 ring-1 ring-amber-100">Recipient phone number is required before WhatsApp delivery.</p>
+      ) : null}
+      {!communication.sendingWhatsappNumber ? (
+        <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm font-semibold leading-6 text-amber-800 ring-1 ring-amber-100">Sending WhatsApp number is not configured for this operating unit.</p>
       ) : null}
       <div className="mt-4 flex flex-wrap gap-2">
         <Link href={`/communications/${communication.id}`} className="focus-ring inline-flex items-center rounded-lg bg-navy-950 px-3 py-2 text-xs font-semibold text-white">Open Communication</Link>
@@ -347,6 +355,10 @@ function toRecord(communication: any): CommunicationRecord {
     assignedStaff: communication.assignedStaff,
     branchId: communication.branchId,
     branch: communication.branch,
+    sendingOperatingUnitId: communication.sendingOperatingUnitId,
+    sendingOperatingUnit: communication.sendingOperatingUnit,
+    sendingWhatsappNumber: communication.sendingWhatsappNumber,
+    sendingContactLabel: communication.sendingContactLabel,
     openedAt: communication.openedAt,
     sentAt: communication.sentAt,
     respondedAt: communication.respondedAt,

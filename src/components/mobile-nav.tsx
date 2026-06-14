@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   Database,
+  KeyRound,
   FileText,
   FileSpreadsheet,
   Flag,
@@ -45,6 +46,9 @@ const navItems = [
   { href: "/onboarding", label: "Onboard", icon: ClipboardCheck },
   { href: "/imports", label: "Imports", icon: FileSpreadsheet },
   { href: "/imports/batches", label: "Batches", icon: Database },
+  { href: "/admin/users", label: "Users", icon: KeyRound },
+  { href: "/admin/operating-units", label: "Units", icon: Building2 },
+  { href: "/account", label: "Account", icon: UsersRound },
   { href: "/settings", label: "Settings", icon: Settings }
 ];
 
@@ -53,13 +57,14 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function MobileNav() {
+export function MobileNav({ visibleHrefs }: { visibleHrefs?: string[] }) {
   const pathname = usePathname();
+  const items = visibleHrefs ? navItems.filter((item) => visibleHrefs.includes(item.href)) : navItems;
 
   return (
     <nav className="border-b border-slate-200 bg-white px-4 py-2 lg:hidden">
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {navItems.map((item) => {
+        {items.map((item) => {
           const Icon = item.icon;
           const active = isActivePath(pathname, item.href);
 

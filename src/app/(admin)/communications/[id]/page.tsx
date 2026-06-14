@@ -69,6 +69,12 @@ export default async function CommunicationDetailPage({ params }: { params: Prom
             <Mini label="Recipient type" value={enumLabel(communication.recipientType)} />
             <Mini label="Channel" value={enumLabel(communication.channel)} />
             <Mini label="Branch" value={communication.branch?.name ?? "Network"} />
+            <Mini
+              label="Send from"
+              value={communication.sendingContactLabel ?? communication.sendingOperatingUnit?.name ?? "Not configured"}
+              tone={communication.sendingWhatsappNumber ? "normal" : "risk"}
+            />
+            <Mini label="Sending WhatsApp" value={communication.sendingWhatsappNumber ?? "Not configured"} tone={communication.sendingWhatsappNumber ? "normal" : "risk"} />
             <Mini label="Assigned sender" value={communication.assignedStaff?.name ?? "Unassigned"} />
             <Mini label="Source" value={enumLabel(communication.sourceType)} />
           </div>

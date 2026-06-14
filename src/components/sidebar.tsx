@@ -9,6 +9,7 @@ import {
   ClipboardList,
   ClipboardCheck,
   Database,
+  KeyRound,
   FileText,
   FileSpreadsheet,
   Flag,
@@ -46,6 +47,9 @@ const navItems = [
   { href: "/onboarding", label: "Onboarding", icon: ClipboardCheck },
   { href: "/imports", label: "Imports", icon: FileSpreadsheet },
   { href: "/imports/batches", label: "Import Batches", icon: Database },
+  { href: "/admin/users", label: "Users", icon: KeyRound },
+  { href: "/admin/operating-units", label: "Operating Units", icon: Building2 },
+  { href: "/account", label: "Account", icon: UsersRound },
   { href: "/settings", label: "Settings", icon: Settings }
 ];
 
@@ -54,8 +58,15 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function Sidebar() {
+export function Sidebar({
+  visibleHrefs,
+  user
+}: {
+  visibleHrefs?: string[];
+  user?: { name: string; role: string; isDemo: boolean; primaryOperatingUnitName: string | null };
+}) {
   const pathname = usePathname();
+  const items = visibleHrefs ? navItems.filter((item) => visibleHrefs.includes(item.href)) : navItems;
 
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-slate-200 bg-navy-950 text-white lg:flex lg:flex-col">
@@ -69,7 +80,7 @@ export function Sidebar() {
         </div>
       </div>
       <nav className="flex-1 space-y-1 px-4 py-4">
-        {navItems.map((item) => {
+        {items.map((item) => {
           const Icon = item.icon;
           const active = isActivePath(pathname, item.href);
 
@@ -93,17 +104,17 @@ export function Sidebar() {
       <div className="border-t border-white/10 p-5">
         <div className="rounded-lg bg-white/10 p-4">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold">Admin-ready structure</p>
+            <p className="text-sm font-semibold">{user?.name ?? "Admin-ready structure"}</p>
             <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald-100 ring-1 ring-emerald-300/20">
-              Demo Mode
+              {user?.isDemo ? "Demo Mode" : user?.role?.replace(/_/g, " ") ?? "Demo Mode"}
             </span>
           </div>
           <p className="mt-1 text-xs leading-5 text-slate-300">
-            Routes live inside the admin shell so authentication can wrap this surface later.
+            {user?.primaryOperatingUnitName ?? "Routes live inside the admin shell with role-based access."}
           </p>
-          <form action="/api/demo-access/logout" method="post" className="mt-4">
+          <form action={user?.isDemo ? "/api/demo-access/logout" : "/api/auth/logout"} method="post" className="mt-4">
             <button type="submit" className="focus-ring w-full rounded-lg bg-white px-3 py-2 text-xs font-semibold text-navy-950 transition hover:bg-clinical-50">
-              Exit Demo
+              {user?.isDemo ? "Exit Demo" : "Sign Out"}
             </button>
           </form>
         </div>

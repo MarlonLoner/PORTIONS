@@ -272,6 +272,55 @@ enum CommunicationOutcomeType {
   OTHER
 }
 
+enum OperatingUnitType {
+  PHYSICAL_BRANCH
+  ONLINE_DEPARTMENT
+  CALL_CENTRE
+  HEAD_OFFICE
+  CENTRAL_WAREHOUSE
+  MARKETING
+  FINANCE
+  ADMINISTRATION
+  OTHER
+}
+
+enum OperatingUnitStatus {
+  ACTIVE
+  INACTIVE
+  SETUP
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  DISABLED
+}
+
+enum UserRole {
+  OWNER
+  CEO
+  GENERAL_MANAGER
+  BRANCH_MANAGER
+  PHARMACIST
+  SUPPORT_AGENT
+  ONLINE_ORDERS_AGENT
+  STOCK_CONTROLLER
+  MARKETING_COORDINATOR
+  EVENT_COORDINATOR
+  FINANCE_ADMIN
+  SYSTEM_ADMIN
+  VIEW_ONLY
+}
+
+enum OperatingUnitAccessLevel {
+  VIEW
+  OPERATE
+  MANAGE
+  APPROVE
+  ADMIN
+}
+
 enum EventType {
   HEALTH_OUTREACH
   CORPORATE_ACTIVATION
@@ -351,6 +400,8 @@ model Branch {
   notifications      Notification[]
   events             Event[]
   communications     Communication[]
+  operatingUnits     OperatingUnit[]
+  fulfillmentOrders  Order[]        @relation("OrderFulfillmentBranch")
 }
 
 model StaffMember {
@@ -372,6 +423,8 @@ model StaffMember {
   ownedEvents    Event[]              @relation("EventOwner")
   eventChecklistItems EventChecklistItem[]
   communications Communication[]
+  appUser       AppUser?
+  managedUnits  OperatingUnit[] @relation("OperatingUnitManager")
 }
 
 model Patient {
@@ -472,6 +525,12 @@ model Order {
   source                OrderSource
   branchId              String
   branch                Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  fulfillmentBranchId   String?
+  fulfillmentBranch     Branch?      @relation("OrderFulfillmentBranch", fields: [fulfillmentBranchId], references: [id], onDelete: SetNull)
+  originatingOperatingUnitId String?
+  originatingOperatingUnit   OperatingUnit? @relation("OrderOriginUnit", fields: [originatingOperatingUnitId], references: [id], onDelete: SetNull)
+  assignedOperatingUnitId    String?
+  assignedOperatingUnit      OperatingUnit? @relation("OrderAssignedUnit", fields: [assignedOperatingUnitId], references: [id], onDelete: SetNull)
   type                  OrderType
   status                OrderStatus
   amount                Decimal      @default(0) @db.Decimal(12, 2)
@@ -703,6 +762,8 @@ model Event {
   activities         EventActivity[]
   review             EventReview?
   communications     Communication[]
+  communicationOperatingUnitId String?
+  communicationOperatingUnit   OperatingUnit? @relation(fields: [communicationOperatingUnitId], references: [id], onDelete: SetNull)
 
   @@index([status, startDate])
   @@index([eventType])
@@ -809,6 +870,10 @@ model Communication {
   assignedStaff       StaffMember?                   @relation(fields: [assignedStaffId], references: [id], onDelete: SetNull)
   branchId            String?
   branch              Branch?                        @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  sendingOperatingUnitId String?
+  sendingOperatingUnit   OperatingUnit?              @relation(fields: [sendingOperatingUnitId], references: [id], onDelete: SetNull)
+  sendingWhatsappNumber  String?
+  sendingContactLabel    String?
   scheduledFor        DateTime?
   openedAt            DateTime?
   sentAt              DateTime?
@@ -837,6 +902,7 @@ model Communication {
   @@index([eventId])
   @@index([assignedStaffId])
   @@index([branchId])
+  @@index([sendingOperatingUnitId])
 }
 
 model CommunicationActivity {
@@ -849,4 +915,91 @@ model CommunicationActivity {
   createdAt       DateTime      @default(now())
 
   @@index([communicationId, createdAt])
+}
+
+model OperatingUnit {
+  id                       String                    @id @default(cuid())
+  name                     String
+  code                     String                    @unique
+  type                     OperatingUnitType
+  status                   OperatingUnitStatus       @default(ACTIVE)
+  branchId                 String?
+  branch                   Branch?                   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  parentUnitId             String?
+  parentUnit               OperatingUnit?            @relation("OperatingUnitHierarchy", fields: [parentUnitId], references: [id], onDelete: SetNull)
+  childUnits               OperatingUnit[]           @relation("OperatingUnitHierarchy")
+  location                 String?
+  phone                    String?
+  whatsappNumber           String?
+  email                    String?
+  contactLabel             String?
+  managerStaffId           String?
+  managerStaff             StaffMember?              @relation("OperatingUnitManager", fields: [managerStaffId], references: [id], onDelete: SetNull)
+  handlesOnlineOrders      Boolean                   @default(false)
+  handlesPatientFollowUps  Boolean                   @default(false)
+  handlesStock             Boolean                   @default(false)
+  handlesEvents            Boolean                   @default(false)
+  handlesCommunications    Boolean                   @default(false)
+  isPrimaryOnlineUnit      Boolean                   @default(false)
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  userAccess               UserOperatingUnitAccess[]
+  primaryUsers             AppUser[]                 @relation("PrimaryOperatingUnit")
+  originatingOrders        Order[]                   @relation("OrderOriginUnit")
+  assignedOrders           Order[]                   @relation("OrderAssignedUnit")
+  communications           Communication[]
+  events                   Event[]
+
+  @@index([type, status])
+  @@index([branchId])
+  @@index([managerStaffId])
+}
+
+model AppUser {
+  id                     String                    @id @default(cuid())
+  name                   String
+  email                  String                    @unique
+  passwordHash           String
+  status                 UserStatus                @default(INVITED)
+  role                   UserRole
+  staffMemberId          String?                   @unique
+  staffMember            StaffMember?              @relation(fields: [staffMemberId], references: [id], onDelete: SetNull)
+  primaryOperatingUnitId String?
+  primaryOperatingUnit   OperatingUnit?            @relation("PrimaryOperatingUnit", fields: [primaryOperatingUnitId], references: [id], onDelete: SetNull)
+  lastLoginAt            DateTime?
+  failedLoginCount       Int                       @default(0)
+  lockedUntil            DateTime?
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+  unitAccess             UserOperatingUnitAccess[]
+  sessions               AppSession[]
+
+  @@index([status, role])
+}
+
+model UserOperatingUnitAccess {
+  id              String                   @id @default(cuid())
+  userId          String
+  user            AppUser                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  operatingUnitId String
+  operatingUnit   OperatingUnit            @relation(fields: [operatingUnitId], references: [id], onDelete: Cascade)
+  accessLevel     OperatingUnitAccessLevel @default(VIEW)
+  isPrimary       Boolean                  @default(false)
+  createdAt       DateTime                 @default(now())
+
+  @@unique([userId, operatingUnitId])
+  @@index([operatingUnitId])
+}
+
+model AppSession {
+  id        String   @id @default(cuid())
+  userId    String
+  user      AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
 }

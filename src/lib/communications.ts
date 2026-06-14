@@ -12,6 +12,7 @@ import {
 import { revalidatePath } from "next/cache";
 import { enumLabel, formatDate } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
+import { getCommunicationSendingUnit, getDefaultWhatsAppForEvent, getDefaultWhatsAppForOrder, getDefaultWhatsAppForPatient, normalizeOperatingUnitPhone } from "@/lib/operating-units";
 
 export const communicationChannels = Object.values(CommunicationChannel);
 export const communicationStatuses = Object.values(CommunicationStatus);
@@ -54,6 +55,7 @@ const communicationInclude = {
   event: { include: { ownerStaff: true, branch: true } },
   assignedStaff: { include: { branch: true } },
   branch: true,
+  sendingOperatingUnit: true,
   activities: { orderBy: { createdAt: "desc" } }
 } satisfies Prisma.CommunicationInclude;
 
@@ -258,6 +260,7 @@ export async function createCommunication(input: {
   const message = cleanString(input.message) || getCommunicationTemplate(templateType, resolved ?? { recipientName, sourceType });
   const ready = channel !== CommunicationChannel.WHATSAPP || Boolean(getRecipientPhone(recipientPhone));
   const links = buildSourceLinkData(sourceType, sourceId, resolved);
+  const sending = await resolveSendingContext({ sourceType, sourceId, branchId, resolved });
 
   const communication = await prisma.communication.create({
     data: {
@@ -272,6 +275,9 @@ export async function createCommunication(input: {
       sourceType,
       sourceId,
       branchId,
+      sendingOperatingUnitId: sending.operatingUnitId,
+      sendingWhatsappNumber: sending.number || null,
+      sendingContactLabel: sending.label,
       assignedStaffId,
       patientId: links.patientId,
       orderId: links.orderId,
@@ -279,7 +285,11 @@ export async function createCommunication(input: {
       operationalActionId: links.operationalActionId,
       notificationId: links.notificationId,
       eventId: links.eventId,
-      metadata: { templateType, recipientWarning: ready ? null : "Recipient phone number is required before WhatsApp delivery." },
+      metadata: {
+        templateType,
+        recipientWarning: ready ? null : "Recipient phone number is required before WhatsApp delivery.",
+        sendingWarning: sending.number ? null : "Sending WhatsApp number is not configured for this operating unit."
+      },
       activities: {
         create: {
           activityType: "CREATED",
@@ -630,6 +640,33 @@ function buildSourceLinkData(sourceType: string, sourceId: string | null, resolv
     operationalActionId: resolved?.operationalActionId ?? (sourceType === "OPERATIONAL_ACTION" ? sourceId : null),
     notificationId: resolved?.notificationId ?? (sourceType === "NOTIFICATION" ? sourceId : null),
     eventId: resolved?.eventId ?? (sourceType === "EVENT" ? sourceId : null)
+  };
+}
+
+async function resolveSendingContext(input: {
+  sourceType: string;
+  sourceId: string | null;
+  branchId: string | null;
+  resolved: any;
+}) {
+  if (input.sourceType === "ORDER" && input.sourceId) {
+    return getDefaultWhatsAppForOrder(input.sourceId);
+  }
+  if (input.sourceType === "PATIENT" && input.sourceId) {
+    return getDefaultWhatsAppForPatient(input.sourceId);
+  }
+  if (input.sourceType === "FOLLOW_UP_TASK" && input.resolved?.patientId) {
+    return getDefaultWhatsAppForPatient(input.resolved.patientId);
+  }
+  if (input.sourceType === "EVENT" && input.sourceId) {
+    return getDefaultWhatsAppForEvent(input.sourceId);
+  }
+
+  const unit = await getCommunicationSendingUnit({ sourceType: input.sourceType, branchId: input.branchId });
+  return {
+    number: normalizeOperatingUnitPhone(unit?.whatsappNumber),
+    label: unit?.contactLabel ?? unit?.name ?? "Sending WhatsApp not configured",
+    operatingUnitId: unit?.id ?? null
   };
 }
 

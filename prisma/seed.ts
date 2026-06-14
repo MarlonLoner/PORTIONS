@@ -12,6 +12,9 @@ import {
   NotificationSeverity,
   NotificationStatus,
   NotificationType,
+  OperatingUnitAccessLevel,
+  OperatingUnitStatus,
+  OperatingUnitType,
   OperationalActionCategory,
   OperationalActionOutcome,
   OperationalActionPriority,
@@ -24,9 +27,12 @@ import {
   PrismaClient,
   ReportType,
   RiskScore,
-  StockStatus
+  StockStatus,
+  UserRole,
+  UserStatus
 } from "@prisma/client";
-import type { Branch, Patient, StaffMember } from "@prisma/client";
+import type { Branch, OperatingUnit, Patient, StaffMember } from "@prisma/client";
+import { randomBytes, scryptSync } from "node:crypto";
 
 const prisma = new PrismaClient();
 
@@ -41,6 +47,16 @@ function addDays(days: number) {
 
 function money(amount: number) {
   return amount.toFixed(2);
+}
+
+function seedPasswordHash(password: string) {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(password, salt, 64).toString("hex");
+  return `scrypt:${salt}:${hash}`;
+}
+
+function operatingUnitCode(value: string) {
+  return value.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
 const branchSeeds = [
@@ -182,6 +198,9 @@ const stockProducts = [
 ];
 
 async function main() {
+  await prisma.appSession.deleteMany();
+  await prisma.userOperatingUnitAccess.deleteMany();
+  await prisma.appUser.deleteMany();
   await prisma.communicationActivity.deleteMany();
   await prisma.communication.deleteMany();
   await prisma.notification.deleteMany();
@@ -196,6 +215,7 @@ async function main() {
   await prisma.refillEvent.deleteMany();
   await prisma.patientMedication.deleteMany();
   await prisma.patient.deleteMany();
+  await prisma.operatingUnit.deleteMany();
   await prisma.staffMember.deleteMany();
   await prisma.branch.deleteMany();
 
@@ -221,6 +241,162 @@ async function main() {
       })
     );
   }
+
+  const branchOperatingUnits = new Map<string, OperatingUnit>();
+  for (const [index, branch] of Array.from(branches.values()).entries()) {
+    const created = await prisma.operatingUnit.create({
+      data: {
+        name: `${branch.name} Branch`,
+        code: `${operatingUnitCode(branch.name)}_BRANCH`,
+        type: OperatingUnitType.PHYSICAL_BRANCH,
+        status: OperatingUnitStatus.ACTIVE,
+        branchId: branch.id,
+        location: branch.area,
+        phone: `+263 77 000 ${String(1100 + index)}`,
+        whatsappNumber: `+263 77 000 ${String(1100 + index)}`,
+        contactLabel: `${branch.name} Branch WhatsApp`,
+        managerStaffId: staff.find((member) => member.branchId === branch.id && /manager|lead|coach|pharmacist/i.test(member.role))?.id ?? null,
+        handlesOnlineOrders: true,
+        handlesPatientFollowUps: true,
+        handlesStock: true,
+        handlesEvents: true,
+        handlesCommunications: true
+      }
+    });
+    branchOperatingUnits.set(branch.id, created);
+  }
+
+  const onlineUnit = await prisma.operatingUnit.create({
+    data: {
+      name: "Online Department",
+      code: "ONLINE_DEPARTMENT",
+      type: OperatingUnitType.ONLINE_DEPARTMENT,
+      status: OperatingUnitStatus.ACTIVE,
+      location: "Central WhatsApp and web order desk",
+      phone: "+263 77 000 1200",
+      whatsappNumber: "+263 77 000 1200",
+      contactLabel: "PORTIONS Online Orders",
+      isPrimaryOnlineUnit: true,
+      handlesOnlineOrders: true,
+      handlesPatientFollowUps: false,
+      handlesStock: false,
+      handlesEvents: false,
+      handlesCommunications: true
+    }
+  });
+
+  const headOfficeUnit = await prisma.operatingUnit.create({
+    data: {
+      name: "Head Office",
+      code: "HEAD_OFFICE",
+      type: OperatingUnitType.HEAD_OFFICE,
+      status: OperatingUnitStatus.ACTIVE,
+      location: "Executive command office",
+      phone: "+263 77 000 1300",
+      whatsappNumber: "+263 77 000 1300",
+      contactLabel: "PORTIONS Head Office",
+      handlesOnlineOrders: false,
+      handlesPatientFollowUps: false,
+      handlesStock: false,
+      handlesEvents: true,
+      handlesCommunications: true
+    }
+  });
+
+  const financeUnit = await prisma.operatingUnit.create({
+    data: {
+      name: "Finance",
+      code: "FINANCE",
+      type: OperatingUnitType.FINANCE,
+      status: OperatingUnitStatus.ACTIVE,
+      location: "Finance and approvals",
+      phone: "+263 77 000 1400",
+      whatsappNumber: "+263 77 000 1400",
+      contactLabel: "PORTIONS Finance",
+      handlesOnlineOrders: false,
+      handlesPatientFollowUps: false,
+      handlesStock: false,
+      handlesEvents: false,
+      handlesCommunications: true
+    }
+  });
+
+  const demoPassword = process.env.SEED_USER_PASSWORD || process.env.DEMO_USER_PASSWORD || "PORTIONS-DEMO-2026!";
+  const passwordHash = seedPasswordHash(demoPassword);
+  const allUnits = [...branchOperatingUnits.values(), onlineUnit, headOfficeUnit, financeUnit];
+  const primaryStaff = staff[0];
+  const ownerUser = await prisma.appUser.create({
+    data: {
+      name: "PORTIONS Owner Demo",
+      email: "owner@portions.co.zw",
+      passwordHash,
+      role: UserRole.OWNER,
+      status: UserStatus.ACTIVE,
+      staffMemberId: primaryStaff?.id,
+      primaryOperatingUnitId: headOfficeUnit.id,
+      unitAccess: {
+        create: allUnits.map((unit) => ({
+          operatingUnitId: unit.id,
+          accessLevel: OperatingUnitAccessLevel.ADMIN,
+          isPrimary: unit.id === headOfficeUnit.id
+        }))
+      }
+    }
+  });
+
+  await prisma.appUser.createMany({
+    data: [
+      {
+        name: "General Manager",
+        email: "gm@portions.co.zw",
+        passwordHash,
+        role: UserRole.GENERAL_MANAGER,
+        status: UserStatus.ACTIVE,
+        primaryOperatingUnitId: headOfficeUnit.id
+      },
+      {
+        name: "Online Orders Lead",
+        email: "online@portions.co.zw",
+        passwordHash,
+        role: UserRole.ONLINE_ORDERS_AGENT,
+        status: UserStatus.ACTIVE,
+        primaryOperatingUnitId: onlineUnit.id
+      },
+      {
+        name: "Finance Admin",
+        email: "finance@portions.co.zw",
+        passwordHash,
+        role: UserRole.FINANCE_ADMIN,
+        status: UserStatus.ACTIVE,
+        primaryOperatingUnitId: financeUnit.id
+      },
+      {
+        name: "Readonly Board Viewer",
+        email: "viewer@portions.co.zw",
+        passwordHash,
+        role: UserRole.VIEW_ONLY,
+        status: UserStatus.ACTIVE,
+        primaryOperatingUnitId: headOfficeUnit.id
+      }
+    ]
+  });
+
+  const createdUsers = await prisma.appUser.findMany();
+  const accessRows = createdUsers
+    .filter((user) => user.id !== ownerUser.id)
+    .flatMap((user) => {
+      const unitIds =
+        user.role === UserRole.ONLINE_ORDERS_AGENT ? [onlineUnit.id] :
+        user.role === UserRole.FINANCE_ADMIN ? [financeUnit.id, headOfficeUnit.id] :
+        allUnits.map((unit) => unit.id);
+      return unitIds.map((operatingUnitId) => ({
+        userId: user.id,
+        operatingUnitId,
+        accessLevel: user.role === UserRole.VIEW_ONLY ? OperatingUnitAccessLevel.VIEW : OperatingUnitAccessLevel.MANAGE,
+        isPrimary: operatingUnitId === user.primaryOperatingUnitId
+      }));
+    });
+  if (accessRows.length) await prisma.userOperatingUnitAccess.createMany({ data: accessRows, skipDuplicates: true });
 
   const branchList = Array.from(branches.values());
   const patients: Patient[] = [];
@@ -362,6 +538,8 @@ async function main() {
     const source = orderSources[index % orderSources.length];
     const status = orderStatuses[index % orderStatuses.length];
     const amount = 24 + (index % 9) * 11 + (source === OrderSource.DIASPORA ? 38 : 0);
+    const branchUnit = branchOperatingUnits.get(branch.id);
+    const originUnit = source === OrderSource.WALK_IN ? branchUnit : onlineUnit;
 
     await prisma.order.create({
       data: {
@@ -369,6 +547,9 @@ async function main() {
         phone: patient.phone,
         source,
         branchId: branch.id,
+        fulfillmentBranchId: branch.id,
+        originatingOperatingUnitId: originUnit?.id,
+        assignedOperatingUnitId: source === OrderSource.WALK_IN ? branchUnit?.id : onlineUnit.id,
         type: orderTypes[index % orderTypes.length],
         status,
         amount: money(amount),
@@ -711,6 +892,12 @@ async function main() {
     prisma.notification.findFirst({ include: { recipientStaff: true, branch: true, action: true }, orderBy: { createdAt: "desc" } })
   ]);
   const demoAction = openActions[0];
+  const communicationSeedFields = (unit?: OperatingUnit | null) => ({
+    sendingOperatingUnitId: unit?.id ?? null,
+    sendingWhatsappNumber: unit?.whatsappNumber ?? null,
+    sendingContactLabel: unit?.contactLabel ?? unit?.name ?? null
+  });
+  const branchSendingUnit = (branchId?: string | null) => (branchId ? branchOperatingUnits.get(branchId) : null) ?? onlineUnit;
 
   await prisma.communication.createMany({
     data: [
@@ -728,6 +915,7 @@ async function main() {
         followUpTaskId: demoFollowUp.id,
         assignedStaffId: demoFollowUp.assignedStaffId,
         branchId: demoFollowUp.branchId,
+        ...communicationSeedFields(branchSendingUnit(demoFollowUp.branchId)),
         metadata: { seed: true, templateType: "REFILL_REMINDER" }
       }] : []),
       ...(demoOrder ? [{
@@ -744,6 +932,7 @@ async function main() {
         orderId: demoOrder.id,
         assignedStaffId: demoOrder.assignedStaffId,
         branchId: demoOrder.branchId,
+        ...communicationSeedFields(demoOrder.source === OrderSource.WALK_IN ? branchSendingUnit(demoOrder.branchId) : onlineUnit),
         openedAt: addDays(-1),
         sentAt: addDays(-1),
         metadata: { seed: true, templateType: "ORDER_PAYMENT" }
@@ -761,6 +950,7 @@ async function main() {
         eventId: demoEvent.id,
         assignedStaffId: demoEvent.ownerStaffId,
         branchId: demoEvent.branchId,
+        ...communicationSeedFields(branchSendingUnit(demoEvent.branchId)),
         openedAt: addDays(0),
         metadata: { seed: true, templateType: "EVENT_REMINDER" }
       }] : []),
@@ -777,6 +967,7 @@ async function main() {
         operationalActionId: demoAction.id,
         assignedStaffId: demoAction.assignedStaffId,
         branchId: demoAction.branchId,
+        ...communicationSeedFields(branchSendingUnit(demoAction.branchId)),
         openedAt: addDays(-1),
         sentAt: addDays(-1),
         respondedAt: addDays(0),
@@ -798,6 +989,7 @@ async function main() {
         operationalActionId: demoNotification.actionId,
         assignedStaffId: demoNotification.recipientStaffId,
         branchId: demoNotification.branchId,
+        ...communicationSeedFields(branchSendingUnit(demoNotification.branchId)),
         openedAt: addDays(0),
         sentAt: addDays(0),
         followUpRequired: true,

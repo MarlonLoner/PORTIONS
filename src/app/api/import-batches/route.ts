@@ -1,5 +1,6 @@
 import { ImportBatchStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { getCurrentAccessUser, hasPermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 function cleanString(value: unknown) {
@@ -23,6 +24,10 @@ function initialStatus(validationStatus: string, readinessScore: number, missing
 
 export async function POST(request: Request) {
   try {
+    const user = await getCurrentAccessUser();
+    if (!user) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+    if (!hasPermission(user, "importData")) return NextResponse.json({ error: "You do not have permission to save import batches." }, { status: 403 });
+
     const body = await request.json();
     const templateType = cleanString(body.templateType);
     const fileName = cleanString(body.fileName);

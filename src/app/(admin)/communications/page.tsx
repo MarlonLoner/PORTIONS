@@ -31,6 +31,15 @@ export default async function CommunicationsPage() {
     assignedStaff: communication.assignedStaff ? { id: communication.assignedStaff.id, name: communication.assignedStaff.name, role: communication.assignedStaff.role } : null,
     branchId: communication.branchId,
     branch: communication.branch ? { id: communication.branch.id, name: communication.branch.name } : null,
+    sendingOperatingUnitId: communication.sendingOperatingUnitId,
+    sendingOperatingUnit: communication.sendingOperatingUnit ? {
+      id: communication.sendingOperatingUnit.id,
+      name: communication.sendingOperatingUnit.name,
+      contactLabel: communication.sendingOperatingUnit.contactLabel,
+      whatsappNumber: communication.sendingOperatingUnit.whatsappNumber
+    } : null,
+    sendingWhatsappNumber: communication.sendingWhatsappNumber,
+    sendingContactLabel: communication.sendingContactLabel,
     openedAt: communication.openedAt?.toISOString() ?? null,
     sentAt: communication.sentAt?.toISOString() ?? null,
     respondedAt: communication.respondedAt?.toISOString() ?? null,

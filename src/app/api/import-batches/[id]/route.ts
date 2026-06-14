@@ -1,5 +1,6 @@
 import { ImportBatchStatus, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { getCurrentAccessUser, hasPermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 function isImportBatchStatus(value: unknown): value is ImportBatchStatus {
@@ -16,6 +17,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params;
 
   try {
+    const user = await getCurrentAccessUser();
+    if (!user) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+    if (!hasPermission(user, "importData")) return NextResponse.json({ error: "You do not have permission to update import batches." }, { status: 403 });
+
     const body = await request.json();
     const data: Prisma.ImportBatchUpdateInput = {};
 

@@ -1,9 +1,21 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { createCommunication, getCommunicationCenterData } from "@/lib/communications";
+import { getCurrentAccessUser, hasPermission } from "@/lib/auth";
+
+async function requireCommunicationAccess(write = false) {
+  const user = await getCurrentAccessUser();
+  if (!user) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+  if (write && !hasPermission(user, "manageCommunications")) {
+    return NextResponse.json({ error: "You do not have permission to manage communications." }, { status: 403 });
+  }
+  return null;
+}
 
 export async function GET() {
   try {
+    const accessError = await requireCommunicationAccess();
+    if (accessError) return accessError;
     const data = await getCommunicationCenterData();
     return NextResponse.json(data.communications);
   } catch {
@@ -13,6 +25,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const accessError = await requireCommunicationAccess(true);
+    if (accessError) return accessError;
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== "object") {
       return NextResponse.json({ error: "Invalid communication request." }, { status: 400 });

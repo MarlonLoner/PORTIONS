@@ -1,5 +1,6 @@
 import { ImportBatchStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { getCurrentAccessUser, hasPermission } from "@/lib/auth";
 import {
   canExecuteImportBatch,
   executeBranchImport,
@@ -16,6 +17,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   const { id } = await params;
 
   try {
+    const user = await getCurrentAccessUser();
+    if (!user) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+    if (!hasPermission(user, "importData")) return NextResponse.json({ error: "You do not have permission to execute import batches." }, { status: 403 });
+
     const batch = await prisma.importBatch.findUnique({ where: { id } });
     if (!batch) {
       return NextResponse.json({ error: "Import batch was not found." }, { status: 404 });

@@ -1,5 +1,6 @@
 import { PilotRequestStatus, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { getCurrentAccessUser, hasPermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 function cleanOptionalString(value: unknown) {
@@ -16,6 +17,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params;
 
   try {
+    const user = await getCurrentAccessUser();
+    if (!user) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+    if (!hasPermission(user, "managePilot")) return NextResponse.json({ error: "You do not have permission to manage pilot requests." }, { status: 403 });
+
     const body = await request.json();
     const data: Prisma.PilotRequestUpdateInput = {};
 

@@ -1,6 +1,6 @@
 import { CalendarDays, Search } from "lucide-react";
 
-export function TopBar() {
+export function TopBar({ user }: { user?: { name: string; role: string; isDemo: boolean; primaryOperatingUnitName: string | null } }) {
   const date = new Intl.DateTimeFormat("en-ZW", {
     weekday: "long",
     day: "2-digit",
@@ -27,11 +27,17 @@ export function TopBar() {
         </div>
         <div className="flex items-center gap-2">
           <span className="hidden rounded-full bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-emerald-700 ring-1 ring-emerald-100 sm:inline-flex">
-            Demo Mode
+            {user?.isDemo ? "Demo Mode" : user?.role?.replace(/_/g, " ") ?? "Demo Mode"}
           </span>
-          <form action="/api/demo-access/logout" method="post" className="hidden sm:block lg:hidden">
+          {user ? (
+            <div className="hidden rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 md:block">
+              <span className="font-semibold text-navy-950">{user.name}</span>
+              <span className="ml-2">{user.primaryOperatingUnitName ?? "Network"}</span>
+            </div>
+          ) : null}
+          <form action={user?.isDemo ? "/api/demo-access/logout" : "/api/auth/logout"} method="post" className="hidden sm:block lg:hidden">
             <button type="submit" className="focus-ring rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">
-              Exit Demo
+              {user?.isDemo ? "Exit Demo" : "Sign Out"}
             </button>
           </form>
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
