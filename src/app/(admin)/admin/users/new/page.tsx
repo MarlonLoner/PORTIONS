@@ -1,17 +1,31 @@
 import { redirect } from "next/navigation";
-import { OperatingUnitAccessLevel, UserRole, UserStatus } from "@prisma/client";
 import { hashPassword, requirePermission, validatePasswordStrength } from "@/lib/auth";
 import { enumLabel } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
+import {
+  getCurrentAdminUser,
+  getUserCreationAccessLevels,
+  getUserCreationOperatingUnits,
+  getUserCreationRoleOptions,
+  getUserCreationStaffOptions,
+  getUserCreationStatusOptions,
+  isUserCreationAccessLevel,
+  isUserCreationRole,
+  isUserCreationStatus
+} from "@/lib/admin-user-creation";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewUserPage() {
-  await requirePermission("manageUsers");
-  const [units, staff] = await Promise.all([
-    prisma.operatingUnit.findMany({ orderBy: { name: "asc" } }),
-    prisma.staffMember.findMany({ orderBy: { name: "asc" } })
+  const [adminUser, units, staff] = await Promise.all([
+    getCurrentAdminUser(),
+    getUserCreationOperatingUnits(),
+    getUserCreationStaffOptions()
   ]);
+  if (!adminUser) redirect("/access-denied");
+  const roles = getUserCreationRoleOptions();
+  const statuses = getUserCreationStatusOptions();
+  const accessLevels = getUserCreationAccessLevels();
 
   async function createUser(formData: FormData) {
     "use server";
@@ -19,11 +33,14 @@ export default async function NewUserPage() {
     const name = String(formData.get("name") ?? "").trim();
     const email = String(formData.get("email") ?? "").trim().toLowerCase();
     const password = String(formData.get("password") ?? "");
-    const role = String(formData.get("role") ?? "VIEW_ONLY") as UserRole;
-    const status = String(formData.get("status") ?? "ACTIVE") as UserStatus;
+    const roleValue = String(formData.get("role") ?? "VIEW_ONLY");
+    const statusValue = String(formData.get("status") ?? "ACTIVE");
+    const accessLevelValue = String(formData.get("accessLevel") ?? "VIEW");
+    const role = isUserCreationRole(roleValue) ? roleValue : "VIEW_ONLY";
+    const status = isUserCreationStatus(statusValue) ? statusValue : "ACTIVE";
+    const accessLevel = isUserCreationAccessLevel(accessLevelValue) ? accessLevelValue : "VIEW";
     const staffMemberId = optional(String(formData.get("staffMemberId") ?? ""));
     const primaryOperatingUnitId = optional(String(formData.get("primaryOperatingUnitId") ?? ""));
-    const accessLevel = String(formData.get("accessLevel") ?? "VIEW") as OperatingUnitAccessLevel;
     const operatingUnitIds = Array.from(new Set([
       primaryOperatingUnitId,
       ...formData.getAll("operatingUnitIds").map((value) => optional(String(value ?? "")))
@@ -31,24 +48,32 @@ export default async function NewUserPage() {
     if (!name || !email) throw new Error("Name and email are required.");
     const passwordError = validatePasswordStrength(password);
     if (passwordError) throw new Error(passwordError);
-    const user = await prisma.appUser.create({
-      data: {
-        name,
-        email,
-        passwordHash: hashPassword(password),
-        role,
-        status,
-        mustChangePassword: true,
-        staffMemberId,
-        primaryOperatingUnitId,
-        unitAccess: operatingUnitIds.length ? {
-          create: operatingUnitIds.map((operatingUnitId) => ({
-            operatingUnitId,
-            accessLevel,
-            isPrimary: operatingUnitId === primaryOperatingUnitId
-          }))
-        } : undefined
-      }
+    const user = await prisma.$transaction(async (tx) => {
+      const [validUnits, validStaff] = await Promise.all([
+        operatingUnitIds.length ? tx.operatingUnit.findMany({ where: { id: { in: operatingUnitIds } }, select: { id: true } }) : Promise.resolve([]),
+        staffMemberId ? tx.staffMember.findUnique({ where: { id: staffMemberId }, select: { id: true } }) : Promise.resolve(null)
+      ]);
+      const validUnitIds = new Set(validUnits.map((unit) => unit.id));
+      const primaryUnitId = primaryOperatingUnitId && validUnitIds.has(primaryOperatingUnitId) ? primaryOperatingUnitId : null;
+      return tx.appUser.create({
+        data: {
+          name,
+          email,
+          passwordHash: hashPassword(password),
+          role,
+          status,
+          mustChangePassword: true,
+          staffMemberId: validStaff?.id ?? null,
+          primaryOperatingUnitId: primaryUnitId,
+          unitAccess: validUnitIds.size ? {
+            create: Array.from(validUnitIds).map((operatingUnitId) => ({
+              operatingUnitId,
+              accessLevel,
+              isPrimary: operatingUnitId === primaryUnitId
+            }))
+          } : undefined
+        }
+      });
     });
     redirect(`/admin/users/${user.id}`);
   }
@@ -66,11 +91,11 @@ export default async function NewUserPage() {
           <Field label="Name" name="name" required />
           <Field label="Email" name="email" type="email" required />
           <Field label="Temporary password" name="password" type="text" required />
-          <Select label="Role" name="role" options={Object.values(UserRole)} />
-          <Select label="Status" name="status" options={Object.values(UserStatus)} defaultValue={UserStatus.ACTIVE} />
-          <Select label="Staff member" name="staffMemberId" options={staff.map((member) => member.id)} labels={Object.fromEntries(staff.map((member) => [member.id, `${member.name} - ${member.role}`]))} includeNone />
-          <Select label="Primary operating unit" name="primaryOperatingUnitId" options={units.map((unit) => unit.id)} labels={Object.fromEntries(units.map((unit) => [unit.id, unit.name]))} includeNone />
-          <Select label="Access level" name="accessLevel" options={Object.values(OperatingUnitAccessLevel)} defaultValue={OperatingUnitAccessLevel.OPERATE} />
+          <Select label="Role" name="role" options={roles} />
+          <Select label="Status" name="status" options={statuses} defaultValue="ACTIVE" />
+          <Select label="Staff member" name="staffMemberId" options={staff.map((member) => member.id)} labels={Object.fromEntries(staff.map((member) => [member.id, `${member.name} - ${member.role}${member.branchName ? ` / ${member.branchName}` : ""}`]))} includeNone />
+          <Select label="Primary operating unit" name="primaryOperatingUnitId" options={units.map((unit) => unit.id)} labels={Object.fromEntries(units.map((unit) => [unit.id, `${unit.name} (${enumLabel(unit.type)})`]))} includeNone />
+          <Select label="Access level" name="accessLevel" options={accessLevels} defaultValue="OPERATE" />
         </div>
 
         <div className="mt-5 rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
@@ -79,9 +104,10 @@ export default async function NewUserPage() {
             {units.map((unit) => (
               <label key={unit.id} className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200">
                 <input type="checkbox" name="operatingUnitIds" value={unit.id} className="h-4 w-4 rounded border-slate-300" />
-                {unit.name}
+                {unit.name} <span className="text-xs font-medium text-slate-500">({enumLabel(unit.type)}{unit.branchName ? ` / ${unit.branchName}` : ""})</span>
               </label>
             ))}
+            {!units.length ? <p className="rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-800 ring-1 ring-amber-100">No operating units are configured yet. Create the user without unit access, then configure units.</p> : null}
           </div>
         </div>
 

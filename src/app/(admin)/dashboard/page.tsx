@@ -8,14 +8,18 @@ import {
   CheckCircle2,
   ClipboardCheck,
   CreditCard,
+  KeyRound,
   LineChart,
   MessageSquareWarning,
   MessageSquareText,
   PackageCheck,
   RadioTower,
+  Settings2,
   ShoppingCart,
+  Smartphone,
   Target,
   TrendingUp,
+  UserPlus,
   UsersRound
 } from "lucide-react";
 import Link from "next/link";
@@ -33,11 +37,16 @@ import {
 import { getEscalationAiSummary, getNotificationSummary } from "@/lib/notifications";
 import { getCommunicationMetrics } from "@/lib/communications";
 import { getEventMetrics, getEventNextAction, getEventReadinessSummary } from "@/lib/events";
+import { canManageSettings, canManageUsers, getCurrentAccessUser } from "@/lib/auth";
+import { getAdminControlCenterMetrics } from "@/lib/admin-user-creation";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const data = await getDashboardData();
+  const user = await getCurrentAccessUser();
+  const showAdminControl = user ? canManageUsers(user) || canManageSettings(user) : false;
+  const adminMetrics = showAdminControl ? await getAdminControlCenterMetrics() : null;
   const communicationMetrics = await getCommunicationMetrics();
   const maxRevenue = Math.max(...data.revenueByBranch.map((branch) => branch.revenue), 1);
   const topUrgency = [...data.followUpUrgency].sort((a, b) => b.count - a.count)[0];
@@ -133,6 +142,60 @@ export default async function DashboardPage() {
         <StatCard title="Pharmacist reviews" value={String(data.pendingPharmacistReviews)} helper="Orders waiting for clinical review" icon={<ClipboardCheck className="h-5 w-5" />} tone="amber" trend="Clinical" />
         <StatCard title="Active stock alerts" value={String(data.stockAlertCount)} helper="Low, expiry, dead, and overstock issues" icon={<PackageCheck className="h-5 w-5" />} trend="Stock" />
       </section>
+
+      {showAdminControl && adminMetrics ? (
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-700">Owner controls</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy-950">Administration & Access</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                Manage user accounts, operating-unit access, WhatsApp sender setup, and temporary-password cleanup from the command dashboard.
+              </p>
+            </div>
+            <Link href="/admin/users" className="focus-ring rounded-lg bg-navy-950 px-4 py-2.5 text-sm font-semibold text-white">Open Admin Control</Link>
+          </div>
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <AdminControlCard
+              icon={<KeyRound className="h-5 w-5" />}
+              title="User Accounts"
+              detail={`${adminMetrics.activeUsers} active / ${adminMetrics.invitedUsers} invited / ${adminMetrics.suspendedUsers} suspended`}
+              href="/admin/users"
+              cta="Manage users"
+            />
+            <AdminControlCard
+              icon={<UserPlus className="h-5 w-5" />}
+              title="Create Staff Login"
+              detail="Create secure staff access and force first-login password change."
+              href="/admin/users/new"
+              cta="Create user"
+            />
+            <AdminControlCard
+              icon={<Settings2 className="h-5 w-5" />}
+              title="Operating Units"
+              detail={`${adminMetrics.physicalBranches} branches / ${adminMetrics.onlineDepartments} online / ${adminMetrics.headOfficeUnits} head office / ${adminMetrics.financeUnits} finance`}
+              href="/admin/operating-units"
+              cta="Configure units"
+            />
+            <AdminControlCard
+              icon={<Smartphone className="h-5 w-5" />}
+              title="WhatsApp Configuration"
+              detail={`${adminMetrics.unitsMissingWhatsapp} units need sender WhatsApp numbers`}
+              href="/admin/operating-units"
+              cta="Review units"
+              tone={adminMetrics.unitsMissingWhatsapp > 0 ? "warn" : "normal"}
+            />
+            <AdminControlCard
+              icon={<UsersRound className="h-5 w-5" />}
+              title="Access & Permissions"
+              detail={`${adminMetrics.usersWithoutPrimaryUnit} without primary unit / ${adminMetrics.usersWithTemporaryPasswords} temporary passwords`}
+              href="/admin/users"
+              cta="Review users"
+              tone={adminMetrics.usersWithTemporaryPasswords > 0 || adminMetrics.usersWithoutPrimaryUnit > 0 ? "warn" : "normal"}
+            />
+          </div>
+        </section>
+      ) : null}
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -409,6 +472,33 @@ function ExecutiveFlag({ label, value, intent }: { label: string; value: string;
       <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-300">{label}</p>
       <p className="mt-2 text-2xl font-semibold tracking-tight text-white">{value}</p>
     </div>
+  );
+}
+
+function AdminControlCard({
+  icon,
+  title,
+  detail,
+  href,
+  cta,
+  tone = "normal"
+}: {
+  icon: ReactNode;
+  title: string;
+  detail: string;
+  href: string;
+  cta: string;
+  tone?: "normal" | "warn";
+}) {
+  const toneClass = tone === "warn" ? "border-amber-200 bg-amber-50/70" : "border-slate-200 bg-slate-50";
+  const iconClass = tone === "warn" ? "text-amber-700" : "text-clinical-700";
+  return (
+    <article className={`rounded-lg border p-4 ${toneClass}`}>
+      <div className={iconClass}>{icon}</div>
+      <h3 className="mt-3 text-base font-semibold tracking-tight text-navy-950">{title}</h3>
+      <p className="mt-2 min-h-[48px] text-sm leading-6 text-slate-600">{detail}</p>
+      <Link href={href} className="focus-ring mt-4 inline-flex rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">{cta}</Link>
+    </article>
   );
 }
 
