@@ -1,9 +1,10 @@
 "use client";
 
 import { Clipboard, KeyRound, RefreshCw } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
+import type { CreateUserState } from "@/app/(admin)/admin/users/new/actions";
 
-type Option = { id: string; name: string };
+type Option = { id: string; name: string; helper?: string };
 
 export function AdminUserCreateForm({
   action,
@@ -13,13 +14,14 @@ export function AdminUserCreateForm({
   units,
   staff
 }: {
-  action: (formData: FormData) => void | Promise<void>;
+  action: (state: CreateUserState, formData: FormData) => Promise<CreateUserState>;
   roles: string[];
   statuses: string[];
   accessLevels: string[];
   units: Option[];
   staff: Option[];
 }) {
+  const [state, formAction, pending] = useActionState(action, { error: "" });
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,7 +45,7 @@ export function AdminUserCreateForm({
   }
 
   return (
-    <form action={action} className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
+    <form action={formAction} className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="Name" name="name" value={name} onChange={setName} required />
         <Field label="Email" name="email" value={email} onChange={setEmail} type="email" required />
@@ -73,19 +75,21 @@ export function AdminUserCreateForm({
           {units.map((unit) => (
             <label key={unit.id} className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200">
               <input type="checkbox" name="operatingUnitIds" value={unit.id} className="h-4 w-4 rounded border-slate-300" />
-              {unit.name}
+              <span>{unit.name}{unit.helper ? <span className="ml-1 text-xs font-medium text-slate-500">{unit.helper}</span> : null}</span>
             </label>
           ))}
+          {!units.length ? <p className="rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-800 ring-1 ring-amber-100">No operating units are configured yet. You can still create the login account and add access later.</p> : null}
         </div>
       </div>
 
       <div className="mt-5 flex flex-wrap gap-2">
-        <button className="focus-ring rounded-lg bg-navy-950 px-4 py-2.5 text-sm font-semibold text-white">Create user</button>
+        <button disabled={pending} className="focus-ring rounded-lg bg-navy-950 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{pending ? "Creating..." : "Create user"}</button>
         <button type="button" onClick={copyCredentials} disabled={!email || !password} className="focus-ring inline-flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 disabled:opacity-60">
           <Clipboard className="h-3.5 w-3.5" aria-hidden="true" />
           {copied ? "Copied" : "Copy temporary credentials"}
         </button>
       </div>
+      {state.error ? <p className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 ring-1 ring-rose-100">{state.error}</p> : null}
       <p className="mt-3 text-xs leading-5 text-slate-500">New users must change their temporary password on first login.</p>
     </form>
   );
