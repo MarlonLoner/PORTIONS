@@ -4,6 +4,7 @@ import {
   Prisma
 } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { getCurrentAccessUser, hasPermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 function cleanString(value: unknown) {
@@ -40,6 +41,11 @@ function parseValueAmount(value: unknown) {
 
 export async function POST(request: Request) {
   try {
+    const user = await getCurrentAccessUser();
+    if (!user) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+    if (!hasPermission(user, "manageActions")) return NextResponse.json({ error: "You do not have permission to create operational actions." }, { status: 403 });
+    if (!user.tenantId || user.isDemo) return NextResponse.json({ error: "Operational action creation is not available for this session." }, { status: 403 });
+
     const body = await request.json();
     const title = cleanString(body.title);
     const description = cleanString(body.description);
@@ -71,12 +77,12 @@ export async function POST(request: Request) {
     const assignedStaffId = cleanOptionalString(body.assignedStaffId);
 
     if (branchId) {
-      const branch = await prisma.branch.findUnique({ where: { id: branchId } });
+      const branch = await prisma.branch.findFirst({ where: { id: branchId, tenantId: user.tenantId } });
       if (!branch) return NextResponse.json({ error: "Selected branch was not found." }, { status: 400 });
     }
 
     if (assignedStaffId) {
-      const staff = await prisma.staffMember.findUnique({ where: { id: assignedStaffId } });
+      const staff = await prisma.staffMember.findFirst({ where: { id: assignedStaffId, tenantId: user.tenantId } });
       if (!staff) return NextResponse.json({ error: "Selected staff member was not found." }, { status: 400 });
       if (branchId && staff.branchId && staff.branchId !== branchId) {
         return NextResponse.json({ error: "Assigned staff member belongs to another branch." }, { status: 400 });
@@ -86,6 +92,7 @@ export async function POST(request: Request) {
     const action = await prisma.operationalAction.create({
       data: {
         title,
+        tenantId: user.tenantId,
         description,
         category: body.category,
         priority: body.priority,

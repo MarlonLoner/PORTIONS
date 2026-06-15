@@ -432,6 +432,14 @@ enum TenantSupportAccessStatus {
   REVOKED
 }
 
+enum TenantUserInvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+  CANCELLED
+}
+
 enum TenantSupportAccessScope {
   CONFIGURATION_ONLY
   USER_SUPPORT
@@ -494,6 +502,7 @@ model Tenant {
   eventReviews        EventReview[]
   operatingUnits      OperatingUnit[]
   supportRequests     TenantSupportAccessRequest[]
+  userInvitations     TenantUserInvitation[]
   auditLogs           AuditLog[]
 
   @@index([status, plan])
@@ -1224,6 +1233,7 @@ model PlatformUser {
   updatedAt        DateTime           @updatedAt
   sessions         PlatformSession[]
   supportRequests  TenantSupportAccessRequest[]
+  tenantUserInvitations TenantUserInvitation[]
 
   @@index([status, role])
 }
@@ -1261,6 +1271,29 @@ model TenantSupportAccessRequest {
   @@index([tenantId, status])
   @@index([requestedByPlatformUserId])
   @@index([expiresAt])
+}
+
+model TenantUserInvitation {
+  id                      String                     @id @default(cuid())
+  tenantId                String
+  tenant                  Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email                   String
+  name                    String
+  role                    UserRole                   @default(OWNER)
+  tokenHash               String                     @unique
+  status                  TenantUserInvitationStatus @default(PENDING)
+  expiresAt               DateTime
+  invitedByPlatformUserId String
+  invitedByPlatformUser   PlatformUser               @relation(fields: [invitedByPlatformUserId], references: [id], onDelete: Cascade)
+  acceptedAt              DateTime?
+  revokedAt               DateTime?
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
+
+  @@index([tenantId, status])
+  @@index([email])
+  @@index([expiresAt])
+  @@index([invitedByPlatformUserId])
 }
 
 model AuditLog {

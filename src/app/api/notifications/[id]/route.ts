@@ -1,5 +1,6 @@
 import { NotificationDeliveryChannel, NotificationDeliveryStatus, NotificationStatus, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { getCurrentAccessUser, hasPermission } from "@/lib/auth";
 import { getNotificationCopyMessage, getNotificationSuggestedAction } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 
@@ -15,8 +16,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params;
 
   try {
+    const user = await getCurrentAccessUser();
+    if (!user) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+    if (!hasPermission(user, "manageActions") && !hasPermission(user, "manageCommunications")) return NextResponse.json({ error: "You do not have permission to update notifications." }, { status: 403 });
+    if (!user.tenantId) return NextResponse.json({ error: "Tenant context is required." }, { status: 403 });
     const body = await request.json();
-    const existing = await prisma.notification.findUnique({ where: { id } });
+    const existing = await prisma.notification.findFirst({ where: { id, tenantId: user.tenantId } });
     if (!existing) return NextResponse.json({ error: "Notification was not found." }, { status: 404 });
 
     const data: Prisma.NotificationUpdateInput = {};
@@ -42,7 +47,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     const notification = await prisma.notification.update({
-      where: { id },
+      where: { id: existing.id },
       data,
       include: {
         branch: true,

@@ -13,6 +13,7 @@ import { revalidatePath } from "next/cache";
 import { enumLabel, formatDate } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { getCommunicationSendingUnit, getDefaultWhatsAppForEvent, getDefaultWhatsAppForOrder, getDefaultWhatsAppForPatient, normalizeOperatingUnitPhone } from "@/lib/operating-units";
+import { requireTenantUser } from "@/lib/tenant";
 
 export const communicationChannels = Object.values(CommunicationChannel);
 export const communicationStatuses = Object.values(CommunicationStatus);
@@ -101,7 +102,8 @@ export async function getCommunicationCenterData(filters: {
   recipientType?: string;
   sourceType?: string;
 } = {}) {
-  const where: Prisma.CommunicationWhereInput = {};
+  const { tenantId } = await requireTenantUser();
+  const where: Prisma.CommunicationWhereInput = { tenantId };
   if (filters.channel && isCommunicationChannel(filters.channel)) where.channel = filters.channel;
   if (filters.status && isCommunicationStatus(filters.status)) where.status = filters.status;
   if (filters.branchId) where.branchId = filters.branchId;
@@ -115,22 +117,25 @@ export async function getCommunicationCenterData(filters: {
       include: communicationInclude,
       orderBy: [{ status: "asc" }, { createdAt: "desc" }]
     }),
-    prisma.branch.findMany({ orderBy: { name: "asc" } }),
-    prisma.staffMember.findMany({ include: { branch: true }, orderBy: { name: "asc" } })
+    prisma.branch.findMany({ where: { tenantId }, orderBy: { name: "asc" } }),
+    prisma.staffMember.findMany({ where: { tenantId }, include: { branch: true }, orderBy: { name: "asc" } })
   ]);
 
   return { communications, branches, staff };
 }
 
 export async function getCommunicationDetail(id: string) {
-  return prisma.communication.findUnique({
-    where: { id },
+  const { tenantId } = await requireTenantUser();
+  return prisma.communication.findFirst({
+    where: { id, tenantId },
     include: communicationInclude
   });
 }
 
 export async function getCommunicationMetrics() {
+  const { tenantId } = await requireTenantUser();
   const communications = await prisma.communication.findMany({
+    where: { tenantId },
     include: { branch: true, assignedStaff: true },
     orderBy: { createdAt: "desc" }
   });
@@ -236,6 +241,7 @@ export async function createCommunication(input: {
   branchId?: string | null;
   recipientType?: string | null;
 }) {
+  const { tenantId } = await requireTenantUser();
   const sourceType = cleanString(input.sourceType || "MANUAL") as CommunicationSourceType;
   const sourceId = cleanOptionalString(input.sourceId);
   const channel = isCommunicationChannel(input.channel) ? input.channel : CommunicationChannel.WHATSAPP;
@@ -244,6 +250,7 @@ export async function createCommunication(input: {
     where: {
       sourceType,
       sourceId,
+      tenantId,
       status: { in: [CommunicationStatus.DRAFT, CommunicationStatus.READY, CommunicationStatus.OPENED] }
     },
     include: communicationInclude,
@@ -251,7 +258,7 @@ export async function createCommunication(input: {
   }) : null;
   if (existing && !input.message && !input.recipientPhone) return existing;
 
-  const resolved = sourceId ? await resolveCommunicationRecipient(sourceType, sourceId) : null;
+  const resolved = sourceId ? await resolveCommunicationRecipient(sourceType, sourceId, tenantId) : null;
   const branchId = cleanOptionalString(input.branchId) ?? resolved?.branchId ?? null;
   const assignedStaffId = cleanOptionalString(input.assignedStaffId) ?? resolved?.assignedStaffId ?? null;
   const recipientName = cleanString(input.recipientName) || resolved?.recipientName || "Manual recipient";
@@ -265,6 +272,7 @@ export async function createCommunication(input: {
   const communication = await prisma.communication.create({
     data: {
       channel,
+      tenantId,
       status: ready ? CommunicationStatus.READY : CommunicationStatus.DRAFT,
       direction: CommunicationDirection.OUTBOUND,
       recipientName,
@@ -305,7 +313,8 @@ export async function createCommunication(input: {
 }
 
 export async function updateCommunication(id: string, input: Record<string, unknown>) {
-  const existing = await prisma.communication.findUnique({ where: { id }, include: communicationInclude });
+  const { tenantId } = await requireTenantUser();
+  const existing = await prisma.communication.findFirst({ where: { id, tenantId }, include: communicationInclude });
   if (!existing) throw new Error("Communication was not found.");
 
   const data: Prisma.CommunicationUpdateInput = {};
@@ -335,7 +344,7 @@ export async function updateCommunication(id: string, input: Record<string, unkn
     const assignedStaffId = cleanOptionalString(input.assignedStaffId);
     if (assignedStaffId !== existing.assignedStaffId) {
       if (assignedStaffId) {
-        const staff = await prisma.staffMember.findUnique({ where: { id: assignedStaffId } });
+        const staff = await prisma.staffMember.findFirst({ where: { id: assignedStaffId, tenantId } });
         if (!staff) throw new Error("Selected sender was not found.");
         if (existing.branchId && staff.branchId !== existing.branchId) throw new Error("Assigned sender belongs to another branch.");
         data.assignedStaff = { connect: { id: assignedStaffId } };
@@ -446,10 +455,12 @@ export async function updateCommunication(id: string, input: Record<string, unkn
   return updated;
 }
 
-export async function resolveCommunicationRecipient(sourceType: CommunicationSourceType | string, sourceId: string) {
+export async function resolveCommunicationRecipient(sourceType: CommunicationSourceType | string, sourceId: string, tenantId?: string) {
+  const scope = tenantId ? { tenantId } : (await requireTenantUser());
+  const scopedTenantId = "tenantId" in scope ? scope.tenantId : tenantId;
   if (sourceType === "FOLLOW_UP_TASK") {
-    const task = await prisma.followUpTask.findUnique({
-      where: { id: sourceId },
+    const task = await prisma.followUpTask.findFirst({
+      where: { id: sourceId, tenantId: scopedTenantId },
       include: { patient: { include: { assignedStaff: true } }, branch: true, assignedStaff: true }
     });
     if (!task) return null;
@@ -467,7 +478,7 @@ export async function resolveCommunicationRecipient(sourceType: CommunicationSou
   }
 
   if (sourceType === "ORDER") {
-    const order = await prisma.order.findUnique({ where: { id: sourceId }, include: { patient: true, branch: true, assignedStaff: true } });
+    const order = await prisma.order.findFirst({ where: { id: sourceId, tenantId: scopedTenantId }, include: { patient: true, branch: true, assignedStaff: true } });
     if (!order) return null;
     return {
       recipientName: order.patient?.name ?? order.customerName,
@@ -483,7 +494,7 @@ export async function resolveCommunicationRecipient(sourceType: CommunicationSou
   }
 
   if (sourceType === "PATIENT") {
-    const patient = await prisma.patient.findUnique({ where: { id: sourceId }, include: { branch: true, assignedStaff: true } });
+    const patient = await prisma.patient.findFirst({ where: { id: sourceId, tenantId: scopedTenantId }, include: { branch: true, assignedStaff: true } });
     if (!patient) return null;
     return {
       recipientName: patient.name,
@@ -498,7 +509,7 @@ export async function resolveCommunicationRecipient(sourceType: CommunicationSou
   }
 
   if (sourceType === "OPERATIONAL_ACTION") {
-    const action = await prisma.operationalAction.findUnique({ where: { id: sourceId }, include: { assignedStaff: true, branch: true } });
+    const action = await prisma.operationalAction.findFirst({ where: { id: sourceId, tenantId: scopedTenantId }, include: { assignedStaff: true, branch: true } });
     if (!action) return null;
     return {
       recipientName: action.assignedStaff?.name ?? action.branch?.managerName ?? "Action owner",
@@ -513,8 +524,8 @@ export async function resolveCommunicationRecipient(sourceType: CommunicationSou
   }
 
   if (sourceType === "NOTIFICATION") {
-    const notification = await prisma.notification.findUnique({
-      where: { id: sourceId },
+    const notification = await prisma.notification.findFirst({
+      where: { id: sourceId, tenantId: scopedTenantId },
       include: { recipientStaff: true, branch: true, action: { include: { assignedStaff: true, branch: true } } }
     });
     if (!notification) return null;
@@ -533,7 +544,7 @@ export async function resolveCommunicationRecipient(sourceType: CommunicationSou
   }
 
   if (sourceType === "EVENT") {
-    const event = await prisma.event.findUnique({ where: { id: sourceId }, include: { ownerStaff: true, branch: true } });
+    const event = await prisma.event.findFirst({ where: { id: sourceId, tenantId: scopedTenantId }, include: { ownerStaff: true, branch: true } });
     if (!event) return null;
     return {
       recipientName: event.ownerStaff?.name ?? event.companyName ?? event.title,

@@ -1,6 +1,7 @@
 import { FollowUpStatus, ImportBatchStatus, OrderStatus, PatientStatus, RiskScore, StockStatus } from "@prisma/client";
 import { getPilotCommandData, getPilotDecisionReadiness, getPilotRisks, getPilotValueCreated } from "@/lib/pilot-command";
 import { prisma } from "@/lib/prisma";
+import { requireTenantUser } from "@/lib/tenant";
 
 type Money = number | string | { toString(): string };
 
@@ -32,8 +33,11 @@ function isToday(value: Date) {
 }
 
 export async function getExecutivePackData() {
+  const { tenantId } = await requireTenantUser();
+  const tenantWhere = { tenantId };
   const [branches, staff, patients, orders, followUps, stockItems, reports, importBatches, operationalActions, notifications, events] = await Promise.all([
     prisma.branch.findMany({
+      where: tenantWhere,
       include: {
         patients: true,
         orders: true,
@@ -43,14 +47,15 @@ export async function getExecutivePackData() {
       },
       orderBy: { name: "asc" }
     }),
-    prisma.staffMember.findMany({ include: { branch: true }, orderBy: { name: "asc" } }),
-    prisma.patient.findMany({ include: { branch: true, followUpTasks: true }, orderBy: { nextRefillDate: "asc" } }),
-    prisma.order.findMany({ include: { branch: true, assignedStaff: true, items: true }, orderBy: { createdAt: "desc" } }),
-    prisma.followUpTask.findMany({ include: { branch: true, patient: true, assignedStaff: true }, orderBy: { dueDate: "asc" } }),
-    prisma.stockItem.findMany({ include: { branch: true }, orderBy: [{ status: "asc" }, { productName: "asc" }] }),
-    prisma.report.findMany({ orderBy: { lastGeneratedAt: "desc" } }),
-    prisma.importBatch.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.staffMember.findMany({ where: tenantWhere, include: { branch: true }, orderBy: { name: "asc" } }),
+    prisma.patient.findMany({ where: tenantWhere, include: { branch: true, followUpTasks: true }, orderBy: { nextRefillDate: "asc" } }),
+    prisma.order.findMany({ where: tenantWhere, include: { branch: true, assignedStaff: true, items: true }, orderBy: { createdAt: "desc" } }),
+    prisma.followUpTask.findMany({ where: tenantWhere, include: { branch: true, patient: true, assignedStaff: true }, orderBy: { dueDate: "asc" } }),
+    prisma.stockItem.findMany({ where: tenantWhere, include: { branch: true }, orderBy: [{ status: "asc" }, { productName: "asc" }] }),
+    prisma.report.findMany({ where: tenantWhere, orderBy: { lastGeneratedAt: "desc" } }),
+    prisma.importBatch.findMany({ where: tenantWhere, orderBy: { createdAt: "desc" } }),
     prisma.operationalAction.findMany({
+      where: tenantWhere,
       include: {
         branch: true,
         assignedStaff: true,
@@ -59,6 +64,7 @@ export async function getExecutivePackData() {
       orderBy: [{ status: "asc" }, { priority: "desc" }, { dueDate: "asc" }]
     }),
     prisma.notification.findMany({
+      where: tenantWhere,
       include: {
         branch: true,
         recipientStaff: true,
@@ -67,6 +73,7 @@ export async function getExecutivePackData() {
       orderBy: [{ status: "asc" }, { severity: "desc" }, { createdAt: "desc" }]
     }),
     prisma.event.findMany({
+      where: tenantWhere,
       include: {
         branch: true,
         ownerStaff: true,

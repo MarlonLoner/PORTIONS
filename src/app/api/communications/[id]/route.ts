@@ -6,6 +6,7 @@ import { getCommunicationDetail, getWhatsappUrl, updateCommunication } from "@/l
 async function requireCommunicationAccess(write = false) {
   const user = await getCurrentAccessUser();
   if (!user) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+  if (write && user.isDemo) return NextResponse.json({ error: "Communication updates are disabled in demo mode." }, { status: 403 });
   if (write && !hasPermission(user, "manageCommunications")) {
     return NextResponse.json({ error: "You do not have permission to manage communications." }, { status: 403 });
   }

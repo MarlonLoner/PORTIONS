@@ -5,6 +5,7 @@ import {
   Prisma
 } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { getCurrentAccessUser, hasPermission } from "@/lib/auth";
 import { resolveNotificationsForOperationalAction } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 
@@ -50,8 +51,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params;
 
   try {
-    const existing = await prisma.operationalAction.findUnique({
-      where: { id },
+    const user = await getCurrentAccessUser();
+    if (!user) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+    if (!hasPermission(user, "manageActions")) return NextResponse.json({ error: "You do not have permission to update operational actions." }, { status: 403 });
+    if (!user.tenantId) return NextResponse.json({ error: "Tenant context is required." }, { status: 403 });
+
+    const existing = await prisma.operationalAction.findFirst({
+      where: { id, tenantId: user.tenantId },
       include: { assignedStaff: true }
     });
     if (!existing) return NextResponse.json({ error: "Operational action was not found." }, { status: 404 });
@@ -65,7 +71,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (assignedStaffId === existing.assignedStaffId) {
         // No assignment change; avoid duplicate audit entries.
       } else if (assignedStaffId) {
-        const staff = await prisma.staffMember.findUnique({ where: { id: assignedStaffId } });
+        const staff = await prisma.staffMember.findFirst({ where: { id: assignedStaffId, tenantId: user.tenantId } });
         if (!staff) return NextResponse.json({ error: "Selected staff member was not found." }, { status: 400 });
         if (existing.branchId && staff.branchId && staff.branchId !== existing.branchId) {
           return NextResponse.json({ error: "Assigned staff member belongs to another branch." }, { status: 400 });
@@ -149,15 +155,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     if (Object.keys(data).length === 0) {
-      const current = await prisma.operationalAction.findUnique({
-        where: { id },
+      const current = await prisma.operationalAction.findFirst({
+        where: { id, tenantId: user.tenantId },
         include: { branch: true, assignedStaff: true, activities: { orderBy: { createdAt: "desc" } } }
       });
       return NextResponse.json(current);
     }
 
     const updated = await prisma.operationalAction.update({
-      where: { id },
+      where: { id: existing.id },
       data: {
         ...data,
         activities: activities.length ? { create: activities } : undefined
@@ -166,7 +172,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     });
 
     if (updated.status === OperationalActionStatus.COMPLETED && updated.sourceType === "EVENT_CHECKLIST_ITEM" && updated.sourceId) {
-      const checklistItem = await prisma.eventChecklistItem.findUnique({ where: { id: updated.sourceId }, include: { event: true } });
+      const checklistItem = await prisma.eventChecklistItem.findFirst({ where: { id: updated.sourceId, tenantId: user.tenantId }, include: { event: true } });
       if (checklistItem && checklistItem.operationalActionId === updated.id && checklistItem.status !== "COMPLETED") {
         await prisma.eventChecklistItem.update({
           where: { id: checklistItem.id },

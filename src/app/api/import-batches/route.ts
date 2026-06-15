@@ -27,6 +27,7 @@ export async function POST(request: Request) {
     const user = await getCurrentAccessUser();
     if (!user) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
     if (!hasPermission(user, "importData")) return NextResponse.json({ error: "You do not have permission to save import batches." }, { status: 403 });
+    if (!user.tenantId || user.isDemo) return NextResponse.json({ error: "Import batch saves are not available for this session." }, { status: 403 });
 
     const body = await request.json();
     const templateType = cleanString(body.templateType);
@@ -43,6 +44,7 @@ export async function POST(request: Request) {
     const batch = await prisma.importBatch.create({
       data: {
         templateType,
+        tenantId: user.tenantId,
         fileName,
         rowCount: numberValue(body.rowCount),
         readinessScore,

@@ -8,7 +8,8 @@
     "start": "next start",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "prisma db seed"
+    "prisma:seed": "prisma db seed",
+    "tenant:check": "tsx scripts/check-tenant-integrity.ts"
   },
   "dependencies": {
     "@prisma/client": "6.8.2",

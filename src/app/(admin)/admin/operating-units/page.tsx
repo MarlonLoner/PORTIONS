@@ -8,19 +8,25 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 export default async function OperatingUnitsPage() {
-  await requirePermission("manageOperatingUnits");
+  const currentUser = await requirePermission("manageOperatingUnits");
+  const tenantWhere = currentUser.tenantId ? { tenantId: currentUser.tenantId } : {};
   const [units, branches, staff] = await Promise.all([
-    prisma.operatingUnit.findMany({ include: { branch: true, managerStaff: true, userAccess: true }, orderBy: [{ type: "asc" }, { name: "asc" }] }),
-    prisma.branch.findMany({ orderBy: { name: "asc" } }),
-    prisma.staffMember.findMany({ orderBy: { name: "asc" } })
+    prisma.operatingUnit.findMany({ where: tenantWhere, include: { branch: true, managerStaff: true, userAccess: true }, orderBy: [{ type: "asc" }, { name: "asc" }] }),
+    prisma.branch.findMany({ where: tenantWhere, orderBy: { name: "asc" } }),
+    prisma.staffMember.findMany({ where: tenantWhere, orderBy: { name: "asc" } })
   ]);
 
   async function updateUnit(formData: FormData) {
     "use server";
-    await requirePermission("manageOperatingUnits");
+    const actor = await requirePermission("manageOperatingUnits");
+    if (!actor.tenantId || actor.isDemo) return;
     const id = String(formData.get("id") ?? "");
+    const managerStaffId = optional(String(formData.get("managerStaffId") ?? ""));
+    const manager = managerStaffId ? await prisma.staffMember.findFirst({ where: { id: managerStaffId, tenantId: actor.tenantId }, select: { id: true } }) : null;
+    const existing = await prisma.operatingUnit.findFirst({ where: { id, tenantId: actor.tenantId }, select: { id: true } });
+    if (!existing) return;
     await prisma.operatingUnit.update({
-      where: { id },
+      where: { id: existing.id },
       data: {
         name: String(formData.get("name") ?? "").trim(),
         status: String(formData.get("status") ?? "ACTIVE") as OperatingUnitStatus,
@@ -29,7 +35,7 @@ export default async function OperatingUnitsPage() {
         whatsappNumber: optional(String(formData.get("whatsappNumber") ?? "")),
         email: optional(String(formData.get("email") ?? "")),
         contactLabel: optional(String(formData.get("contactLabel") ?? "")),
-        managerStaffId: optional(String(formData.get("managerStaffId") ?? "")),
+        managerStaffId: manager?.id ?? null,
         handlesOnlineOrders: formData.get("handlesOnlineOrders") === "on",
         handlesPatientFollowUps: formData.get("handlesPatientFollowUps") === "on",
         handlesStock: formData.get("handlesStock") === "on",
@@ -42,16 +48,20 @@ export default async function OperatingUnitsPage() {
 
   async function createUnit(formData: FormData) {
     "use server";
-    await requirePermission("manageOperatingUnits");
+    const actor = await requirePermission("manageOperatingUnits");
+    if (!actor.tenantId || actor.isDemo) return;
     const name = String(formData.get("name") ?? "").trim();
     const code = String(formData.get("code") ?? "").trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+    const branchId = optional(String(formData.get("branchId") ?? ""));
+    const branch = branchId ? await prisma.branch.findFirst({ where: { id: branchId, tenantId: actor.tenantId }, select: { id: true } }) : null;
     await prisma.operatingUnit.create({
       data: {
+        tenantId: actor.tenantId,
         name,
         code,
         type: String(formData.get("type") ?? "OTHER") as OperatingUnitType,
         status: String(formData.get("status") ?? "SETUP") as OperatingUnitStatus,
-        branchId: optional(String(formData.get("branchId") ?? "")),
+        branchId: branch?.id ?? null,
         location: optional(String(formData.get("location") ?? "")),
         whatsappNumber: optional(String(formData.get("whatsappNumber") ?? "")),
         contactLabel: optional(String(formData.get("contactLabel") ?? "")),

@@ -1,6 +1,7 @@
 import { FollowUpOutcomeType, FollowUpStatus, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { serializeFollowUpTaskForClient } from "@/lib/follow-up-serialization";
+import { getCurrentAccessUser, hasPermission } from "@/lib/auth";
 import { resolveNotificationsForSource } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 
@@ -46,8 +47,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params;
 
   try {
-    const existing = await prisma.followUpTask.findUnique({
-      where: { id },
+    const user = await getCurrentAccessUser();
+    if (!user) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+    if (!hasPermission(user, "manageFollowUps")) return NextResponse.json({ error: "You do not have permission to update follow-ups." }, { status: 403 });
+    if (!user.tenantId) return NextResponse.json({ error: "Tenant context is required." }, { status: 403 });
+
+    const existing = await prisma.followUpTask.findFirst({
+      where: { id, tenantId: user.tenantId },
       include: { assignedStaff: true, patient: true, branch: true }
     });
     if (!existing) return NextResponse.json({ error: "Follow-up task was not found." }, { status: 404 });
@@ -64,7 +70,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const assignedStaffId = cleanOptionalString(body.assignedStaffId);
       if (assignedStaffId !== existing.assignedStaffId) {
         if (assignedStaffId) {
-          const staff = await prisma.staffMember.findUnique({ where: { id: assignedStaffId } });
+          const staff = await prisma.staffMember.findFirst({ where: { id: assignedStaffId, tenantId: user.tenantId } });
           if (!staff) return NextResponse.json({ error: "Recommended staff member is no longer available for this branch." }, { status: 400 });
           if (staff.branchId !== existing.branchId) {
             return NextResponse.json({ error: "Recommended staff member is no longer available for this branch." }, { status: 400 });
@@ -156,8 +162,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     if (Object.keys(data).length === 0) {
-      const current = await prisma.followUpTask.findUnique({
-        where: { id },
+      const current = await prisma.followUpTask.findFirst({
+        where: { id, tenantId: user.tenantId },
         include: {
           patient: { include: { assignedStaff: true, refillEvents: true } },
           branch: true,
@@ -170,7 +176,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     const updated = await prisma.$transaction(async (tx) => tx.followUpTask.update({
-      where: { id },
+      where: { id: existing.id },
       data: {
         ...data,
         activities: activities.length ? { create: activities } : undefined

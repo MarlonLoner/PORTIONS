@@ -163,7 +163,7 @@ export function mapFollowUpTaskRow(row: Record<string, string>) {
   };
 }
 
-export async function executeBranchImport(tx: PrismaClient | Prisma.TransactionClient, rows: Array<Record<string, string>>): Promise<ImportExecutionResult> {
+export async function executeBranchImport(tx: PrismaClient | Prisma.TransactionClient, rows: Array<Record<string, string>>, tenantId: string): Promise<ImportExecutionResult> {
   const rowResults: ImportRowResult[] = [];
 
   for (const [index, row] of rows.entries()) {
@@ -175,7 +175,7 @@ export async function executeBranchImport(tx: PrismaClient | Prisma.TransactionC
       continue;
     }
 
-    const existing = await tx.branch.findUnique({ where: { name: mapped.name } });
+    const existing = await tx.branch.findFirst({ where: { tenantId, name: mapped.name } });
     if (existing) {
       rowResults.push({ rowNumber, action: "skipped", recordType: "Branch", name: mapped.name, reason: "Branch with this name already exists." });
       continue;
@@ -184,6 +184,7 @@ export async function executeBranchImport(tx: PrismaClient | Prisma.TransactionC
     await tx.branch.create({
       data: {
         name: mapped.name,
+        tenantId,
         area: mapped.area,
         managerName: mapped.managerName
       }
@@ -194,7 +195,7 @@ export async function executeBranchImport(tx: PrismaClient | Prisma.TransactionC
   return summarizeRowResults(rowResults);
 }
 
-export async function executeStaffImport(tx: PrismaClient | Prisma.TransactionClient, rows: Array<Record<string, string>>): Promise<ImportExecutionResult> {
+export async function executeStaffImport(tx: PrismaClient | Prisma.TransactionClient, rows: Array<Record<string, string>>, tenantId: string): Promise<ImportExecutionResult> {
   const rowResults: ImportRowResult[] = [];
 
   for (const [index, row] of rows.entries()) {
@@ -206,7 +207,7 @@ export async function executeStaffImport(tx: PrismaClient | Prisma.TransactionCl
       continue;
     }
 
-    const branch = await tx.branch.findUnique({ where: { name: mapped.branchName } });
+    const branch = await tx.branch.findFirst({ where: { tenantId, name: mapped.branchName } });
     if (!branch) {
       rowResults.push({ rowNumber, action: "failed", recordType: "StaffMember", name: mapped.name, reason: `Branch '${mapped.branchName}' does not exist.` });
       continue;
@@ -215,6 +216,7 @@ export async function executeStaffImport(tx: PrismaClient | Prisma.TransactionCl
     const existing = await tx.staffMember.findFirst({
       where: {
         name: mapped.name,
+        tenantId,
         branchId: branch.id
       }
     });
@@ -238,7 +240,7 @@ export async function executeStaffImport(tx: PrismaClient | Prisma.TransactionCl
   return summarizeRowResults(rowResults);
 }
 
-export async function executeStockImport(tx: PrismaClient | Prisma.TransactionClient, rows: Array<Record<string, string>>): Promise<ImportExecutionResult> {
+export async function executeStockImport(tx: PrismaClient | Prisma.TransactionClient, rows: Array<Record<string, string>>, tenantId: string): Promise<ImportExecutionResult> {
   const rowResults: ImportRowResult[] = [];
 
   for (const [index, row] of rows.entries()) {
@@ -274,7 +276,7 @@ export async function executeStockImport(tx: PrismaClient | Prisma.TransactionCl
       continue;
     }
 
-    const branch = await tx.branch.findUnique({ where: { name: mapped.branchName } });
+    const branch = await tx.branch.findFirst({ where: { tenantId, name: mapped.branchName } });
     if (!branch) {
       rowResults.push({ rowNumber, action: "failed", recordType: "StockItem", name: mapped.productName, reason: "Branch not found" });
       continue;
@@ -298,8 +300,9 @@ export async function executeStockImport(tx: PrismaClient | Prisma.TransactionCl
     try {
       await tx.stockItem.create({
         data: {
-          productName: mapped.productName,
-          category: mapped.category,
+        productName: mapped.productName,
+        tenantId,
+        category: mapped.category,
           branchId: branch.id,
           stockLevel,
           reorderLevel,
@@ -332,7 +335,7 @@ export async function executeStockImport(tx: PrismaClient | Prisma.TransactionCl
   return summarizeRowResults(rowResults);
 }
 
-export async function executeOrderImport(tx: PrismaClient | Prisma.TransactionClient, rows: Array<Record<string, string>>): Promise<ImportExecutionResult> {
+export async function executeOrderImport(tx: PrismaClient | Prisma.TransactionClient, rows: Array<Record<string, string>>, tenantId: string): Promise<ImportExecutionResult> {
   const rowResults: ImportRowResult[] = [];
 
   for (const [index, row] of rows.entries()) {
@@ -357,7 +360,7 @@ export async function executeOrderImport(tx: PrismaClient | Prisma.TransactionCl
     }
     const orderCreatedAt = createdAt ?? new Date();
 
-    const branch = await tx.branch.findUnique({ where: { name: mapped.branchName } });
+    const branch = await tx.branch.findFirst({ where: { tenantId, name: mapped.branchName } });
     if (!branch) {
       rowResults.push({ rowNumber, action: "failed", recordType: "Order", name: mapped.customerName, reason: "Branch not found" });
       continue;
@@ -377,6 +380,7 @@ export async function executeOrderImport(tx: PrismaClient | Prisma.TransactionCl
       ? await tx.staffMember.findFirst({
           where: {
             name: mapped.assignedStaffName,
+            tenantId,
             OR: [{ branchId: branch.id }, { branchId: null }]
           }
         })
@@ -391,6 +395,7 @@ export async function executeOrderImport(tx: PrismaClient | Prisma.TransactionCl
     const existing = await tx.order.findFirst({
       where: {
         customerName: mapped.customerName,
+        tenantId,
         branchId: branch.id,
         amount,
         createdAt: {
@@ -449,7 +454,7 @@ export async function executeOrderImport(tx: PrismaClient | Prisma.TransactionCl
   return summarizeRowResults(rowResults);
 }
 
-export async function executeFollowUpTaskImport(tx: PrismaClient | Prisma.TransactionClient, rows: Array<Record<string, string>>): Promise<ImportExecutionResult> {
+export async function executeFollowUpTaskImport(tx: PrismaClient | Prisma.TransactionClient, rows: Array<Record<string, string>>, tenantId: string): Promise<ImportExecutionResult> {
   const rowResults: ImportRowResult[] = [];
 
   for (const [index, row] of rows.entries()) {
@@ -467,7 +472,7 @@ export async function executeFollowUpTaskImport(tx: PrismaClient | Prisma.Transa
       continue;
     }
 
-    const branch = await tx.branch.findUnique({ where: { name: mapped.branchName } });
+    const branch = await tx.branch.findFirst({ where: { tenantId, name: mapped.branchName } });
     if (!branch) {
       rowResults.push({ rowNumber, action: "failed", recordType: "FollowUpTask", name: mapped.customerName, phone: mapped.phone, taskType: mapped.taskType, reason: "Branch not found" });
       continue;
@@ -480,13 +485,14 @@ export async function executeFollowUpTaskImport(tx: PrismaClient | Prisma.Transa
     const status = normalizeFollowUpStatus(mapped.status);
     if (mapped.status && !status.matched) warnings.push(`Status '${mapped.status}' was not recognized; defaulted to ${status.value}.`);
 
-    const patient = await findImportPatient(tx, mapped.customerName, mapped.phone);
+    const patient = await findImportPatient(tx, mapped.customerName, mapped.phone, tenantId);
     if (!patient) warnings.push("No matching patient found.");
 
     const assignedStaff = mapped.assignedStaffName
       ? await tx.staffMember.findFirst({
           where: {
             name: mapped.assignedStaffName,
+            tenantId,
             OR: [{ branchId: branch.id }, { branchId: null }]
           }
         })
@@ -516,6 +522,7 @@ export async function executeFollowUpTaskImport(tx: PrismaClient | Prisma.Transa
       await tx.followUpTask.create({
         data: {
           patientId: patient?.id,
+          tenantId,
           customerName: patient?.name ?? mapped.customerName,
           type: type.value,
           status: status.value,
@@ -555,7 +562,7 @@ export async function executeFollowUpTaskImport(tx: PrismaClient | Prisma.Transa
   return summarizeRowResults(rowResults);
 }
 
-export async function executeChronicPatientImport(tx: PrismaClient | Prisma.TransactionClient, rows: Array<Record<string, string>>): Promise<ImportExecutionResult> {
+export async function executeChronicPatientImport(tx: PrismaClient | Prisma.TransactionClient, rows: Array<Record<string, string>>, tenantId: string): Promise<ImportExecutionResult> {
   const rowResults: ImportRowResult[] = [];
 
   for (const [index, row] of rows.entries()) {
@@ -573,7 +580,7 @@ export async function executeChronicPatientImport(tx: PrismaClient | Prisma.Tran
       continue;
     }
 
-    const branch = await tx.branch.findUnique({ where: { name: mapped.branchName } });
+    const branch = await tx.branch.findFirst({ where: { tenantId, name: mapped.branchName } });
     if (!branch) {
       rowResults.push({ rowNumber, action: "failed", recordType: "Patient", name: mapped.name, phone: mapped.phone, reason: "Branch not found" });
       continue;
@@ -591,7 +598,7 @@ export async function executeChronicPatientImport(tx: PrismaClient | Prisma.Tran
       continue;
     }
 
-    const existing = await tx.patient.findFirst({ where: { phone: mapped.phone } });
+    const existing = await tx.patient.findFirst({ where: { tenantId, phone: mapped.phone } });
     if (existing) {
       rowResults.push({ rowNumber, action: "skipped", recordType: "Patient", name: mapped.name, phone: mapped.phone, reason: "Patient with this phone number already exists" });
       continue;
@@ -601,6 +608,7 @@ export async function executeChronicPatientImport(tx: PrismaClient | Prisma.Tran
       ? await tx.staffMember.findFirst({
           where: {
             name: mapped.assignedStaffName,
+            tenantId,
             OR: [{ branchId: branch.id }, { branchId: null }]
           }
         })
@@ -614,6 +622,7 @@ export async function executeChronicPatientImport(tx: PrismaClient | Prisma.Tran
       await tx.patient.create({
         data: {
           name: mapped.name,
+          tenantId,
           phone: mapped.phone,
           branchId: branch.id,
           conditionCategory: mapped.conditionCategory,
@@ -814,14 +823,14 @@ function normalizeFollowUpStatus(value?: string): { value: FollowUpStatus; match
   return { value: FollowUpStatus.PENDING, matched: !normalized };
 }
 
-async function findImportPatient(tx: PrismaClient | Prisma.TransactionClient, customerName: string, phone: string) {
+async function findImportPatient(tx: PrismaClient | Prisma.TransactionClient, customerName: string, phone: string, tenantId: string) {
   if (phone) {
-    const patient = await tx.patient.findFirst({ where: { phone } });
+    const patient = await tx.patient.findFirst({ where: { tenantId, phone } });
     if (patient) return patient;
   }
 
   const matches = await tx.patient.findMany({
-    where: { name: customerName },
+    where: { tenantId, name: customerName },
     take: 2
   });
 

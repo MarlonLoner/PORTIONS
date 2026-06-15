@@ -14,6 +14,7 @@ import {
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { requireTenantUser } from "@/lib/tenant";
 
 export const eventTypes = Object.values(EventType);
 export const eventStatuses = Object.values(EventStatus);
@@ -44,7 +45,8 @@ export async function getEventCommandData(filters: {
   ownerStaffId?: string;
   fundingStatus?: string;
 } = {}) {
-  const where: Prisma.EventWhereInput = {};
+  const { tenantId } = await requireTenantUser();
+  const where: Prisma.EventWhereInput = { tenantId };
   const year = Number(filters.year);
   const month = Number(filters.month);
 
@@ -65,9 +67,9 @@ export async function getEventCommandData(filters: {
       include: eventInclude(),
       orderBy: [{ startDate: "asc" }, { priority: "desc" }]
     }),
-    prisma.event.findMany({ include: eventInclude(), orderBy: [{ startDate: "asc" }, { priority: "desc" }] }),
-    prisma.branch.findMany({ orderBy: { name: "asc" } }),
-    prisma.staffMember.findMany({ include: { branch: true }, orderBy: { name: "asc" } })
+    prisma.event.findMany({ where: { tenantId }, include: eventInclude(), orderBy: [{ startDate: "asc" }, { priority: "desc" }] }),
+    prisma.branch.findMany({ where: { tenantId }, orderBy: { name: "asc" } }),
+    prisma.staffMember.findMany({ where: { tenantId }, include: { branch: true }, orderBy: { name: "asc" } })
   ]);
 
   return {
@@ -82,22 +84,26 @@ export async function getEventCommandData(filters: {
 }
 
 export async function getEventById(id: string) {
-  return prisma.event.findUnique({
-    where: { id },
+  const { tenantId } = await requireTenantUser();
+  return prisma.event.findFirst({
+    where: { id, tenantId },
     include: eventInclude()
   });
 }
 
 export async function getEventFormOptions() {
+  const { tenantId } = await requireTenantUser();
   const [branches, staff] = await Promise.all([
-    prisma.branch.findMany({ orderBy: { name: "asc" } }),
-    prisma.staffMember.findMany({ include: { branch: true }, orderBy: { name: "asc" } })
+    prisma.branch.findMany({ where: { tenantId }, orderBy: { name: "asc" } }),
+    prisma.staffMember.findMany({ where: { tenantId }, include: { branch: true }, orderBy: { name: "asc" } })
   ]);
 
   return { branches, staff };
 }
 
 export async function createEventFromForm(formData: FormData) {
+  const { tenantId, isDemoTenant } = await requireTenantUser();
+  if (isDemoTenant) throw new Error("Event creation is disabled in demo mode.");
   const title = clean(formData.get("title"));
   const eventType = enumOrDefault(formData.get("eventType"), EventType, EventType.HEALTH_OUTREACH);
   const startDate = parseDate(formData.get("startDate"));
@@ -111,6 +117,7 @@ export async function createEventFromForm(formData: FormData) {
   const event = await prisma.event.create({
     data: {
       title,
+      tenantId,
       description: clean(formData.get("description")) || objective,
       eventType,
       status: EventStatus.DRAFT,
@@ -136,6 +143,7 @@ export async function createEventFromForm(formData: FormData) {
       },
       checklistItems: {
         create: getSuggestedChecklistItems(eventType, startDate).map((item) => ({
+          tenantId,
           category: item.category,
           title: item.title,
           description: item.description,
@@ -150,7 +158,8 @@ export async function createEventFromForm(formData: FormData) {
 }
 
 export async function updateEventStatus(eventId: string, status: EventStatus, note?: string) {
-  const event = await prisma.event.findUnique({ where: { id: eventId } });
+  const { tenantId } = await requireTenantUser();
+  const event = await prisma.event.findFirst({ where: { id: eventId, tenantId } });
   if (!event) throw new Error("Event was not found.");
 
   const data: Prisma.EventUpdateInput = { status };
@@ -188,8 +197,11 @@ export async function updateEventStatus(eventId: string, status: EventStatus, no
 }
 
 export async function updateChecklistItem(itemId: string, eventId: string, status: EventChecklistStatus) {
+  const { tenantId } = await requireTenantUser();
+  const existing = await prisma.eventChecklistItem.findFirst({ where: { id: itemId, eventId, tenantId }, select: { id: true } });
+  if (!existing) throw new Error("Checklist item was not found.");
   const item = await prisma.eventChecklistItem.update({
-    where: { id: itemId },
+    where: { id: existing.id },
     include: { operationalAction: true },
     data: {
       status,
@@ -227,7 +239,8 @@ export async function updateChecklistItem(itemId: string, eventId: string, statu
 }
 
 export async function assignEventChecklistItem(itemId: string, eventId: string, assignedStaffId: string | null) {
-  const item = await prisma.eventChecklistItem.findUnique({ where: { id: itemId }, include: { event: true, assignedStaff: true, operationalAction: { include: { assignedStaff: true, branch: true } } } });
+  const { tenantId } = await requireTenantUser();
+  const item = await prisma.eventChecklistItem.findFirst({ where: { id: itemId, eventId, tenantId }, include: { event: true, assignedStaff: true, operationalAction: { include: { assignedStaff: true, branch: true } } } });
   if (!item) throw new Error("Checklist item was not found.");
   if (item.eventId !== eventId) throw new Error("Checklist item does not belong to this event.");
   const normalizedStaffId = normalizeAssignedStaffId(assignedStaffId);
@@ -235,7 +248,7 @@ export async function assignEventChecklistItem(itemId: string, eventId: string, 
     return getEventChecklistAssignment(itemId);
   }
   if (normalizedStaffId) {
-    const staff = await prisma.staffMember.findUnique({ where: { id: normalizedStaffId! } });
+    const staff = await prisma.staffMember.findFirst({ where: { id: normalizedStaffId!, tenantId } });
     if (!staff) throw new Error("Selected staff member was not found.");
     if (item.event.branchId && staff.branchId !== item.event.branchId) throw new Error("Assigned staff member belongs to another branch.");
   }
@@ -262,8 +275,9 @@ export async function assignEventChecklistItem(itemId: string, eventId: string, 
 }
 
 export async function getEventChecklistAssignment(itemId: string) {
-  const item = await prisma.eventChecklistItem.findUnique({
-    where: { id: itemId },
+  const { tenantId } = await requireTenantUser();
+  const item = await prisma.eventChecklistItem.findFirst({
+    where: { id: itemId, tenantId },
     include: {
       assignedStaff: true,
       event: { include: { branch: true } },
@@ -275,8 +289,9 @@ export async function getEventChecklistAssignment(itemId: string) {
 }
 
 export async function createLinkedChecklistAction(itemId: string, eventId: string) {
-  const item = await prisma.eventChecklistItem.findUnique({
-    where: { id: itemId },
+  const { tenantId } = await requireTenantUser();
+  const item = await prisma.eventChecklistItem.findFirst({
+    where: { id: itemId, eventId, tenantId },
     include: { event: { include: { branch: true, ownerStaff: true } }, operationalAction: true, assignedStaff: true }
   });
   if (!item) throw new Error("Checklist item was not found.");
@@ -289,6 +304,7 @@ export async function createLinkedChecklistAction(itemId: string, eventId: strin
     const created = await tx.operationalAction.create({
       data: {
         title: `Event prep: ${item.title}`,
+        tenantId,
         description: `${item.event.title}: ${item.description ?? item.title}`,
         category: OperationalActionCategory.PILOT_TASK,
         priority: item.event.priority === EventPriority.CRITICAL ? OperationalActionPriority.CRITICAL : item.event.priority === EventPriority.HIGH ? OperationalActionPriority.HIGH : OperationalActionPriority.MEDIUM,
@@ -319,16 +335,20 @@ export async function createLinkedChecklistAction(itemId: string, eventId: strin
 }
 
 export async function createEventExpense(eventId: string, formData: FormData) {
+  const { tenantId } = await requireTenantUser();
   const description = clean(formData.get("description"));
   const amount = parseOptionalDecimal(formData.get("amount"));
   if (!description || !amount) throw new Error("Expense description and amount are required.");
 
+  const event = await prisma.event.findFirst({ where: { id: eventId, tenantId }, select: { id: true } });
+  if (!event) throw new Error("Event was not found.");
   await prisma.event.update({
-    where: { id: eventId },
+    where: { id: event.id },
     data: {
       expenses: {
         create: {
           category: clean(formData.get("category")) || "General",
+          tenantId,
           description,
           supplier: optional(formData.get("supplier")),
           amount,
@@ -350,13 +370,16 @@ export async function createEventExpense(eventId: string, formData: FormData) {
 }
 
 export async function createEventReview(eventId: string, formData: FormData) {
+  const { tenantId } = await requireTenantUser();
   const attendance = parseRequiredInt(formData.get("attendance"));
   const leadsGenerated = parseRequiredInt(formData.get("leadsGenerated"));
   const patientsRegistered = parseRequiredInt(formData.get("patientsRegistered"));
   const revenueGenerated = parseOptionalDecimal(formData.get("revenueGenerated")) ?? new Prisma.Decimal(0);
 
+  const event = await prisma.event.findFirst({ where: { id: eventId, tenantId }, select: { id: true } });
+  if (!event) throw new Error("Event was not found.");
   await prisma.event.update({
-    where: { id: eventId },
+    where: { id: event.id },
     data: {
       status: EventStatus.COMPLETED,
       completedAt: new Date(),
@@ -368,6 +391,7 @@ export async function createEventReview(eventId: string, formData: FormData) {
       review: {
         upsert: {
           create: {
+            tenantId,
             attendance,
             leadsGenerated,
             patientsRegistered,

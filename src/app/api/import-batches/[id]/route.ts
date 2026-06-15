@@ -20,6 +20,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const user = await getCurrentAccessUser();
     if (!user) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
     if (!hasPermission(user, "importData")) return NextResponse.json({ error: "You do not have permission to update import batches." }, { status: 403 });
+    if (!user.tenantId || user.isDemo) return NextResponse.json({ error: "Import batch updates are not available for this session." }, { status: 403 });
 
     const body = await request.json();
     const data: Prisma.ImportBatchUpdateInput = {};
@@ -39,10 +40,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ error: "No updates were provided." }, { status: 400 });
     }
 
-    const batch = await prisma.importBatch.update({
-      where: { id },
-      data
-    });
+    const existing = await prisma.importBatch.findFirst({ where: { id, tenantId: user.tenantId }, select: { id: true } });
+    if (!existing) return NextResponse.json({ error: "Import batch was not found." }, { status: 404 });
+
+    const batch = await prisma.importBatch.update({ where: { id: existing.id }, data });
 
     return NextResponse.json(batch);
   } catch (error) {

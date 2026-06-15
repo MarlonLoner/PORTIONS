@@ -20,8 +20,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const user = await getCurrentAccessUser();
     if (!user) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
     if (!hasPermission(user, "importData")) return NextResponse.json({ error: "You do not have permission to execute import batches." }, { status: 403 });
+    if (!user.tenantId || user.isDemo) return NextResponse.json({ error: "Import execution is not available for this session." }, { status: 403 });
 
-    const batch = await prisma.importBatch.findUnique({ where: { id } });
+    const batch = await prisma.importBatch.findFirst({ where: { id, tenantId: user.tenantId } });
     if (!batch) {
       return NextResponse.json({ error: "Import batch was not found." }, { status: 404 });
     }
@@ -38,26 +39,26 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
     const result = await prisma.$transaction(async (tx) => {
       if (batch.templateType === "branches") {
-        return executeBranchImport(tx, rows);
+        return executeBranchImport(tx, rows, user.tenantId!);
       }
 
       if (batch.templateType === "chronic-patients") {
-        return executeChronicPatientImport(tx, rows);
+        return executeChronicPatientImport(tx, rows, user.tenantId!);
       }
 
       if (batch.templateType === "stock-items") {
-        return executeStockImport(tx, rows);
+        return executeStockImport(tx, rows, user.tenantId!);
       }
 
       if (batch.templateType === "orders") {
-        return executeOrderImport(tx, rows);
+        return executeOrderImport(tx, rows, user.tenantId!);
       }
 
       if (batch.templateType === "follow-up-tasks") {
-        return executeFollowUpTaskImport(tx, rows);
+        return executeFollowUpTaskImport(tx, rows, user.tenantId!);
       }
 
-      return executeStaffImport(tx, rows);
+      return executeStaffImport(tx, rows, user.tenantId!);
     });
 
     const updated = await prisma.importBatch.update({

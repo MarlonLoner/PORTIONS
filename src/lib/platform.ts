@@ -108,7 +108,32 @@ export async function getTenantControlPlaneDetail(id: string) {
       suspendedAt: true,
       appUsers: {
         where: { role: { in: ["OWNER", "CEO", "GENERAL_MANAGER", "SYSTEM_ADMIN"] } },
-        select: { id: true, name: true, email: true, role: true, status: true },
+        select: { id: true, name: true, email: true, role: true, status: true, lastLoginAt: true, mustChangePassword: true },
+        orderBy: { name: "asc" }
+      },
+      userInvitations: {
+        where: { role: "OWNER" },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          status: true,
+          expiresAt: true,
+          acceptedAt: true,
+          revokedAt: true,
+          createdAt: true,
+          invitedByPlatformUser: { select: { name: true, role: true } }
+        },
+        orderBy: { createdAt: "desc" },
+        take: 8
+      },
+      operatingUnits: {
+        select: { id: true, name: true, type: true, status: true, isPrimaryOnlineUnit: true },
+        orderBy: [{ type: "asc" }, { name: "asc" }]
+      },
+      branches: {
+        select: { id: true, name: true },
         orderBy: { name: "asc" }
       },
       supportRequests: {
