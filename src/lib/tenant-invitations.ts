@@ -12,6 +12,7 @@ import {
 } from "@prisma/client";
 import type { CurrentPlatformUser } from "@/lib/platform-auth";
 import { createUserSession, hashPassword, validatePasswordStrength } from "@/lib/auth";
+import { createManualInvitationDelivery } from "@/lib/invitation-delivery";
 import { prisma } from "@/lib/prisma";
 
 const INVITATION_DAYS = 7;
@@ -47,6 +48,7 @@ export async function createTenantOwnerInvitation(tenantId: string, input: Tenan
   const token = createInvitationToken();
   const tokenHash = hashInvitationToken(token);
   const now = new Date();
+  const delivery = createManualInvitationDelivery();
 
   const invitation = await prisma.$transaction(async (tx) => {
     const tenant = await tx.tenant.findUnique({
@@ -95,7 +97,7 @@ export async function createTenantOwnerInvitation(tenantId: string, input: Tenan
         recordType: "TenantUserInvitation",
         recordId: created.id,
         outcome: "SUCCESS",
-        metadata: { email, role: UserRole.OWNER }
+        metadata: { email, role: UserRole.OWNER, deliveryMode: delivery.mode, deliveryStatus: delivery.status }
       }
     });
 
