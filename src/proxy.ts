@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { DEMO_ACCESS_COOKIE, isValidDemoAccessToken } from "@/lib/demo-auth";
 
 const AUTH_SESSION_COOKIE = "portions_session";
+const PLATFORM_SESSION_COOKIE = "portions_platform_session";
 
 const protectedPrefixes = [
   "/dashboard",
@@ -27,8 +28,30 @@ const protectedPrefixes = [
   "/imports"
 ];
 
+const platformPublicPrefixes = ["/platform/setup", "/platform/login"];
+const platformProtectedPrefixes = ["/platform"];
+const demoBlockedPrefixes = [
+  "/admin/users",
+  "/admin/operating-units",
+  "/setup",
+  "/account/change-password",
+  "/platform"
+];
+
 function isProtectedPath(pathname: string) {
   return protectedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+function isPlatformPublicPath(pathname: string) {
+  return platformPublicPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+function isPlatformProtectedPath(pathname: string) {
+  return platformProtectedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)) && !isPlatformPublicPath(pathname);
+}
+
+function isDemoBlockedPath(pathname: string) {
+  return demoBlockedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
 export async function proxy(request: NextRequest) {
@@ -36,6 +59,18 @@ export async function proxy(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-pathname", pathname);
+
+  if (isPlatformPublicPath(pathname)) {
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  }
+
+  if (isPlatformProtectedPath(pathname)) {
+    const platformToken = request.cookies.get(PLATFORM_SESSION_COOKIE)?.value;
+    if (platformToken) return NextResponse.next({ request: { headers: requestHeaders } });
+    const redirectUrl = new URL("/platform/login", request.url);
+    redirectUrl.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
+    return NextResponse.redirect(redirectUrl);
+  }
 
   if (!isProtectedPath(pathname)) {
     return NextResponse.next({ request: { headers: requestHeaders } });
@@ -50,6 +85,9 @@ export async function proxy(request: NextRequest) {
   const valid = await isValidDemoAccessToken(token);
 
   if (valid) {
+    if (isDemoBlockedPath(pathname)) {
+      return NextResponse.redirect(new URL("/access-denied", request.url));
+    }
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
@@ -81,6 +119,7 @@ export const config = {
     "/pilot-command/:path*",
     "/executive-pack/:path*",
     "/onboarding/:path*",
-    "/imports/:path*"
+    "/imports/:path*",
+    "/platform/:path*"
   ]
 };

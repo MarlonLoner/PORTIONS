@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { AUTH_SESSION_COOKIE, createUserSession, hashPassword, hasActiveAdministrativeUser, validatePasswordStrength } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { timingSafeEqual } from "node:crypto";
+import { PRIMARY_TENANT_ID } from "@/lib/tenant";
 
 const attempts = new Map<string, { count: number; resetAt: number }>();
 const allowedRoles: UserRole[] = [UserRole.OWNER, UserRole.SYSTEM_ADMIN];
@@ -37,17 +38,35 @@ function isThrottled(key: string) {
 }
 
 async function getPrimarySetupUnit(tx: Prisma.TransactionClient) {
-  return await tx.operatingUnit.findFirst({ where: { type: OperatingUnitType.HEAD_OFFICE, status: "ACTIVE" }, orderBy: { name: "asc" } }) ??
-    await tx.operatingUnit.findFirst({ where: { status: "ACTIVE" }, orderBy: { name: "asc" } });
+  return await tx.operatingUnit.findFirst({ where: { tenantId: PRIMARY_TENANT_ID, type: OperatingUnitType.HEAD_OFFICE, status: "ACTIVE" }, orderBy: { name: "asc" } }) ??
+    await tx.operatingUnit.findFirst({ where: { tenantId: PRIMARY_TENANT_ID, status: "ACTIVE" }, orderBy: { name: "asc" } });
 }
 
 async function getAdminUnits(tx: Prisma.TransactionClient, role: UserRole) {
-  if (role === UserRole.OWNER) return tx.operatingUnit.findMany({ where: { status: "ACTIVE" }, orderBy: { name: "asc" } });
+  if (role === UserRole.OWNER) return tx.operatingUnit.findMany({ where: { tenantId: PRIMARY_TENANT_ID, status: "ACTIVE" }, orderBy: { name: "asc" } });
   const units = await tx.operatingUnit.findMany({
-    where: { status: "ACTIVE", OR: [{ type: OperatingUnitType.HEAD_OFFICE }, { type: OperatingUnitType.ADMINISTRATION }] },
+    where: { tenantId: PRIMARY_TENANT_ID, status: "ACTIVE", OR: [{ type: OperatingUnitType.HEAD_OFFICE }, { type: OperatingUnitType.ADMINISTRATION }] },
     orderBy: { name: "asc" }
   });
-  return units.length ? units : tx.operatingUnit.findMany({ where: { status: "ACTIVE" }, orderBy: { name: "asc" } });
+  return units.length ? units : tx.operatingUnit.findMany({ where: { tenantId: PRIMARY_TENANT_ID, status: "ACTIVE" }, orderBy: { name: "asc" } });
+}
+
+async function ensurePrimaryTenant(tx: Prisma.TransactionClient) {
+  return tx.tenant.upsert({
+    where: { slug: "portions-demo-pharmacy" },
+    update: {},
+    create: {
+      id: PRIMARY_TENANT_ID,
+      name: "PORTIONS Demonstration Pharmacy",
+      slug: "portions-demo-pharmacy",
+      legalName: "PORTIONS Demonstration Pharmacy",
+      status: "ACTIVE",
+      plan: "PILOT",
+      subscriptionStatus: "ACTIVE",
+      activatedAt: new Date(),
+      isDemoTenant: false
+    }
+  });
 }
 
 export async function POST(request: Request) {
@@ -94,10 +113,12 @@ export async function POST(request: Request) {
       if (await hasActiveAdministrativeUser(tx)) {
         throw new Error("SETUP_COMPLETED");
       }
+      const tenant = await ensurePrimaryTenant(tx);
       const primaryUnit = await getPrimarySetupUnit(tx);
       const adminUnits = await getAdminUnits(tx, role);
       return tx.appUser.create({
         data: {
+          tenantId: tenant.id,
           name,
           email,
           passwordHash: hashPassword(password),

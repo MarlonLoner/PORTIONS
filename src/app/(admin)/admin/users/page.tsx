@@ -9,8 +9,9 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 export default async function UsersAdminPage() {
-  await requirePermission("manageUsers");
+  const currentUser = await requirePermission("manageUsers");
   const users = await prisma.appUser.findMany({
+    where: currentUser.tenantId ? { tenantId: currentUser.tenantId } : undefined,
     include: {
       primaryOperatingUnit: true,
       staffMember: true,

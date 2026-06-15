@@ -60,6 +60,7 @@ export async function getCurrentAdminUser() {
       id: user.id,
       name: user.name,
       role: user.role,
+      tenantId: user.tenantId,
       primaryOperatingUnitName: user.primaryOperatingUnitName
     };
   } catch (error) {
@@ -70,7 +71,10 @@ export async function getCurrentAdminUser() {
 
 export async function getUserCreationOperatingUnits(): Promise<OperatingUnitOptionDto[]> {
   try {
+    const user = await getCurrentAccessUser();
+    if (!user?.tenantId || !hasPermission(user, "manageUsers")) return [];
     const units = await prisma.operatingUnit.findMany({
+      where: { tenantId: user.tenantId },
       select: {
         id: true,
         name: true,
@@ -97,7 +101,10 @@ export async function getUserCreationOperatingUnits(): Promise<OperatingUnitOpti
 
 export async function getUserCreationStaffOptions(): Promise<StaffOptionDto[]> {
   try {
+    const user = await getCurrentAccessUser();
+    if (!user?.tenantId || !hasPermission(user, "manageUsers")) return [];
     const staff = await prisma.staffMember.findMany({
+      where: { tenantId: user.tenantId },
       select: {
         id: true,
         name: true,
@@ -146,8 +153,11 @@ export function isUserCreationStatus(value: unknown): value is UserStatus {
 
 export async function getAdminControlCenterMetrics() {
   try {
+    const user = await getCurrentAccessUser();
+    if (!user?.tenantId || !hasPermission(user, "manageUsers")) throw new Error("Admin user context is unavailable.");
     const [users, units] = await Promise.all([
       prisma.appUser.findMany({
+        where: user?.tenantId ? { tenantId: user.tenantId } : undefined,
         select: {
           id: true,
           status: true,
@@ -156,6 +166,7 @@ export async function getAdminControlCenterMetrics() {
         }
       }),
       prisma.operatingUnit.findMany({
+        where: user?.tenantId ? { tenantId: user.tenantId } : undefined,
         select: {
           id: true,
           type: true,

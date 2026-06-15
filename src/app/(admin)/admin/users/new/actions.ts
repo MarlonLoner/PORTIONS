@@ -19,7 +19,8 @@ function optional(value: string) {
 }
 
 export async function createUserAction(_state: CreateUserState, formData: FormData): Promise<CreateUserState> {
-  await requirePermission("manageUsers");
+  const currentUser = await requirePermission("manageUsers");
+  if (!currentUser.tenantId || currentUser.isDemo) return { error: "Tenant administration is not available in demo mode." };
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
@@ -48,13 +49,14 @@ export async function createUserAction(_state: CreateUserState, formData: FormDa
       if (existing) return { existingId: existing.id };
 
       const [validUnits, validStaff] = await Promise.all([
-        operatingUnitIds.length ? tx.operatingUnit.findMany({ where: { id: { in: operatingUnitIds } }, select: { id: true } }) : Promise.resolve([]),
-        staffMemberId ? tx.staffMember.findUnique({ where: { id: staffMemberId }, select: { id: true } }) : Promise.resolve(null)
+        operatingUnitIds.length ? tx.operatingUnit.findMany({ where: { tenantId: currentUser.tenantId, id: { in: operatingUnitIds } }, select: { id: true } }) : Promise.resolve([]),
+        staffMemberId ? tx.staffMember.findFirst({ where: { tenantId: currentUser.tenantId, id: staffMemberId }, select: { id: true } }) : Promise.resolve(null)
       ]);
       const validUnitIds = new Set(validUnits.map((unit) => unit.id));
       const primaryUnitId = primaryOperatingUnitId && validUnitIds.has(primaryOperatingUnitId) ? primaryOperatingUnitId : null;
       const created = await tx.appUser.create({
         data: {
+          tenantId: currentUser.tenantId,
           name,
           email,
           passwordHash: hashPassword(password),

@@ -6,6 +6,8 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import {
   OperatingUnitAccessLevel,
   OperatingUnitType,
+  SubscriptionStatus,
+  TenantStatus,
   UserRole,
   UserStatus
 } from "@prisma/client";
@@ -49,6 +51,12 @@ export type CurrentUser = {
   status: UserStatus;
   mustChangePassword: boolean;
   isDemo: boolean;
+  tenantId: string | null;
+  tenantName: string | null;
+  tenantSlug: string | null;
+  tenantStatus: TenantStatus | null;
+  tenantSubscriptionStatus: SubscriptionStatus | null;
+  isDemoTenant: boolean;
   primaryOperatingUnitId: string | null;
   primaryOperatingUnitName: string | null;
   accessibleOperatingUnits: Array<{
@@ -102,6 +110,9 @@ const pagePermissions: Array<{ prefix: string; permission: PermissionKey }> = [
   { prefix: "/action-center", permission: "manageActions" },
   { prefix: "/reports", permission: "viewReports" }
 ];
+
+const loginBlockedTenantStatuses = new Set<TenantStatus>([TenantStatus.SUSPENDED, TenantStatus.DISABLED, TenantStatus.ARCHIVED]);
+const loginBlockedSubscriptionStatuses = new Set<SubscriptionStatus>([SubscriptionStatus.CANCELLED, SubscriptionStatus.PAUSED]);
 
 function allPermissions(): PermissionKey[] {
   return [
@@ -191,6 +202,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       user: {
         include: {
           primaryOperatingUnit: true,
+          tenant: true,
           unitAccess: { include: { operatingUnit: true }, orderBy: { isPrimary: "desc" } }
         }
       }
@@ -201,6 +213,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     return null;
   }
   if (session.user.status !== UserStatus.ACTIVE) return null;
+  if (session.user.tenant && !isTenantActiveForLogin(session.user.tenant)) return null;
   return toCurrentUser(session.user);
 }
 
@@ -233,6 +246,12 @@ export function getDemoUser(): CurrentUser {
     status: UserStatus.ACTIVE,
     mustChangePassword: false,
     isDemo: true,
+    tenantId: "tenant_portions_demo",
+    tenantName: "PORTIONS Demo Tenant",
+    tenantSlug: "portions-demo",
+    tenantStatus: TenantStatus.ACTIVE,
+    tenantSubscriptionStatus: SubscriptionStatus.NOT_REQUIRED,
+    isDemoTenant: true,
     primaryOperatingUnitId: null,
     primaryOperatingUnitName: "Demo Network",
     accessibleOperatingUnits: []
@@ -248,6 +267,7 @@ export function hasPermission(user: Pick<CurrentUser, "role">, permission: Permi
 }
 
 export function canViewPage(user: CurrentUser, pathname: string) {
+  if (user.isDemo && isDemoAdminBlockedPage(pathname)) return false;
   const match = pagePermissions.find((item) => pathname === item.prefix || pathname.startsWith(`${item.prefix}/`));
   return !match || hasPermission(user, match.permission);
 }
@@ -293,49 +313,49 @@ export function getAccessibleBranchIds(user: CurrentUser) {
 
 export function buildOperatingUnitScope(user: CurrentUser) {
   const unitIds = getAccessibleOperatingUnitIds(user);
-  return unitIds ? { id: { in: unitIds } } : {};
+  return withTenantWhere(user, unitIds ? { id: { in: unitIds } } : {});
 }
 
 export function buildBranchScope(user: CurrentUser) {
   const branchIds = getAccessibleBranchIds(user);
-  return branchIds ? { id: { in: branchIds } } : {};
+  return withTenantWhere(user, branchIds ? { id: { in: branchIds } } : {});
 }
 
 export function buildPatientScope(user: CurrentUser) {
   const branchIds = getAccessibleBranchIds(user);
-  return branchIds ? { branchId: { in: branchIds } } : {};
+  return withTenantWhere(user, branchIds ? { branchId: { in: branchIds } } : {});
 }
 
 export function buildOrderScope(user: CurrentUser) {
-  if (canViewAllUnits(user)) return {};
+  if (canViewAllUnits(user)) return withTenantWhere(user, {});
   const branchIds = getAccessibleBranchIds(user) ?? [];
   const unitIds = getAccessibleOperatingUnitIds(user) ?? [];
-  return {
+  return withTenantWhere(user, {
     OR: [
       { branchId: { in: branchIds } },
       { fulfillmentBranchId: { in: branchIds } },
       { originatingOperatingUnitId: { in: unitIds } },
       { assignedOperatingUnitId: { in: unitIds } }
     ]
-  };
+  });
 }
 
 export function buildEventScope(user: CurrentUser) {
-  if (canViewAllUnits(user) || hasPermission(user, "manageEvents")) return {};
+  if (canViewAllUnits(user) || hasPermission(user, "manageEvents")) return withTenantWhere(user, {});
   const branchIds = getAccessibleBranchIds(user);
-  return branchIds ? { branchId: { in: branchIds } } : {};
+  return withTenantWhere(user, branchIds ? { branchId: { in: branchIds } } : {});
 }
 
 export function buildCommunicationScope(user: CurrentUser) {
-  if (canViewAllUnits(user)) return {};
+  if (canViewAllUnits(user)) return withTenantWhere(user, {});
   const branchIds = getAccessibleBranchIds(user) ?? [];
   const unitIds = getAccessibleOperatingUnitIds(user) ?? [];
-  return {
+  return withTenantWhere(user, {
     OR: [
       { branchId: { in: branchIds } },
       { sendingOperatingUnitId: { in: unitIds } }
     ]
-  };
+  });
 }
 
 export function buildAuditActor(user: CurrentUser | null) {
@@ -357,6 +377,12 @@ function toCurrentUser(user: any): CurrentUser {
     status: user.status,
     mustChangePassword: Boolean(user.mustChangePassword),
     isDemo: false,
+    tenantId: user.tenantId ?? null,
+    tenantName: user.tenant?.name ?? null,
+    tenantSlug: user.tenant?.slug ?? null,
+    tenantStatus: user.tenant?.status ?? null,
+    tenantSubscriptionStatus: user.tenant?.subscriptionStatus ?? null,
+    isDemoTenant: Boolean(user.tenant?.isDemoTenant),
     primaryOperatingUnitId: user.primaryOperatingUnitId,
     primaryOperatingUnitName: user.primaryOperatingUnit?.name ?? null,
     accessibleOperatingUnits: user.unitAccess.map((access: any) => ({
@@ -369,4 +395,25 @@ function toCurrentUser(user: any): CurrentUser {
       isPrimary: access.isPrimary
     }))
   };
+}
+
+function isTenantActiveForLogin(tenant: { status: TenantStatus; subscriptionStatus: SubscriptionStatus }) {
+  if (loginBlockedTenantStatuses.has(tenant.status)) return false;
+  if (loginBlockedSubscriptionStatuses.has(tenant.subscriptionStatus)) return false;
+  return true;
+}
+
+function withTenantWhere(user: CurrentUser, where: Record<string, unknown>) {
+  if (!user.tenantId) return where;
+  return { ...where, tenantId: user.tenantId };
+}
+
+function isDemoAdminBlockedPage(pathname: string) {
+  return [
+    "/admin/users",
+    "/admin/operating-units",
+    "/account/change-password",
+    "/setup",
+    "/platform"
+  ].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }

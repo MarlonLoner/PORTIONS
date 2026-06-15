@@ -381,8 +381,127 @@ enum EventExpenseStatus {
   REJECTED
 }
 
+enum TenantStatus {
+  SETUP
+  ACTIVE
+  SUSPENDED
+  DISABLED
+  ARCHIVED
+}
+
+enum TenantPlan {
+  DEMO
+  PILOT
+  STARTER
+  GROWTH
+  ENTERPRISE
+  CUSTOM
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  PAUSED
+  CANCELLED
+  NOT_REQUIRED
+}
+
+enum PlatformRole {
+  PLATFORM_OWNER
+  PLATFORM_ADMIN
+  PLATFORM_SUPPORT
+  PLATFORM_FINANCE
+  PLATFORM_VIEW_ONLY
+}
+
+enum PlatformUserStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  DISABLED
+}
+
+enum TenantSupportAccessStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  EXPIRED
+  REVOKED
+}
+
+enum TenantSupportAccessScope {
+  CONFIGURATION_ONLY
+  USER_SUPPORT
+  IMPORT_SUPPORT
+  OPERATIONAL_SUPPORT
+  FULL_SUPPORT
+}
+
+enum AuditActorType {
+  TENANT_USER
+  PLATFORM_USER
+  DEMO_USER
+  SYSTEM
+}
+
+model Tenant {
+  id                  String             @id @default(cuid())
+  name                String
+  slug                String             @unique
+  legalName           String?
+  status              TenantStatus       @default(SETUP)
+  plan                TenantPlan         @default(PILOT)
+  primaryContactName  String?
+  primaryContactEmail String?
+  primaryContactPhone String?
+  country             String             @default("Zimbabwe")
+  timezone            String             @default("Africa/Harare")
+  currency            String             @default("USD")
+  subscriptionStatus  SubscriptionStatus @default(TRIAL)
+  trialEndsAt         DateTime?
+  activatedAt         DateTime?
+  suspendedAt         DateTime?
+  dataRegion          String?
+  isDemoTenant        Boolean            @default(false)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  appUsers            AppUser[]
+  branches            Branch[]
+  staffMembers        StaffMember[]
+  patients            Patient[]
+  patientMedications  PatientMedication[]
+  refillEvents        RefillEvent[]
+  followUpTasks       FollowUpTask[]
+  followUpActivities  FollowUpTaskActivity[]
+  orders              Order[]
+  orderItems          OrderItem[]
+  stockItems          StockItem[]
+  reports             Report[]
+  pilotRequests       PilotRequest[]
+  importBatches       ImportBatch[]
+  operationalActions  OperationalAction[]
+  actionActivities    OperationalActionActivity[]
+  notifications       Notification[]
+  communications      Communication[]
+  communicationActivities CommunicationActivity[]
+  events              Event[]
+  eventChecklistItems EventChecklistItem[]
+  eventExpenses       EventExpense[]
+  eventActivities     EventActivity[]
+  eventReviews        EventReview[]
+  operatingUnits      OperatingUnit[]
+  supportRequests     TenantSupportAccessRequest[]
+  auditLogs           AuditLog[]
+
+  @@index([status, plan])
+  @@index([isDemoTenant])
+}
+
 model Branch {
   id                 String         @id @default(cuid())
+  tenantId           String?
+  tenant             Tenant?        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name               String         @unique
   area               String
   managerName        String?
@@ -402,10 +521,14 @@ model Branch {
   communications     Communication[]
   operatingUnits     OperatingUnit[]
   fulfillmentOrders  Order[]        @relation("OrderFulfillmentBranch")
+
+  @@index([tenantId])
 }
 
 model StaffMember {
   id            String         @id @default(cuid())
+  tenantId      String?
+  tenant        Tenant?        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name          String
   role          String
   phone         String
@@ -425,10 +548,14 @@ model StaffMember {
   communications Communication[]
   appUser       AppUser?
   managedUnits  OperatingUnit[] @relation("OperatingUnitManager")
+
+  @@index([tenantId])
 }
 
 model Patient {
   id                String              @id @default(cuid())
+  tenantId          String?
+  tenant            Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name              String
   phone             String
   branchId          String
@@ -449,10 +576,14 @@ model Patient {
   followUpTasks     FollowUpTask[]
   orders            Order[]
   communications     Communication[]
+
+  @@index([tenantId])
 }
 
 model PatientMedication {
   id        String   @id @default(cuid())
+  tenantId  String?
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   patientId String
   patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
   name      String
@@ -461,10 +592,14 @@ model PatientMedication {
   category  String
   notes     String?
   createdAt DateTime @default(now())
+
+  @@index([tenantId])
 }
 
 model RefillEvent {
   id          String       @id @default(cuid())
+  tenantId    String?
+  tenant      Tenant?      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   patientId   String
   patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
   branchId    String
@@ -476,10 +611,14 @@ model RefillEvent {
   amount      Decimal      @default(0) @db.Decimal(12, 2)
   notes       String?
   createdAt   DateTime     @default(now())
+
+  @@index([tenantId])
 }
 
 model FollowUpTask {
   id               String         @id @default(cuid())
+  tenantId         String?
+  tenant           Tenant?        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   patientId        String?
   patient          Patient?       @relation(fields: [patientId], references: [id], onDelete: SetNull)
   customerName     String
@@ -504,10 +643,14 @@ model FollowUpTask {
   communications   Communication[]
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
+
+  @@index([tenantId])
 }
 
 model FollowUpTaskActivity {
   id             String       @id @default(cuid())
+  tenantId       String?
+  tenant         Tenant?      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   followUpTaskId String
   followUpTask   FollowUpTask @relation(fields: [followUpTaskId], references: [id], onDelete: Cascade)
   activityType   String
@@ -516,10 +659,13 @@ model FollowUpTaskActivity {
   createdAt      DateTime     @default(now())
 
   @@index([followUpTaskId, createdAt])
+  @@index([tenantId])
 }
 
 model Order {
   id                    String       @id @default(cuid())
+  tenantId              String?
+  tenant                Tenant?      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   customerName          String
   phone                 String
   source                OrderSource
@@ -545,20 +691,28 @@ model Order {
   internalNotes         String?
   items                 OrderItem[]
   communications         Communication[]
+
+  @@index([tenantId])
 }
 
 model OrderItem {
   id          String  @id @default(cuid())
+  tenantId    String?
+  tenant      Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   orderId     String
   order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productName String
   category    String
   quantity    Int
   unitPrice   Decimal @db.Decimal(12, 2)
+
+  @@index([tenantId])
 }
 
 model StockItem {
   id              String      @id @default(cuid())
+  tenantId        String?
+  tenant          Tenant?     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   productName     String
   category        String
   branchId        String
@@ -571,20 +725,28 @@ model StockItem {
   valueAtRisk     Decimal     @default(0) @db.Decimal(12, 2)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
+
+  @@index([tenantId])
 }
 
 model Report {
   id              String     @id @default(cuid())
+  tenantId        String?
+  tenant          Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   type            ReportType
   title           String
   description     String
   lastGeneratedAt DateTime
   keyMetric       String
   createdAt       DateTime   @default(now())
+
+  @@index([tenantId])
 }
 
 model PilotRequest {
   id             String             @id @default(cuid())
+  tenantId       String?
+  tenant         Tenant?            @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   pharmacyName   String
   contactName    String
   whatsappNumber String
@@ -605,10 +767,13 @@ model PilotRequest {
 
   @@index([status, createdAt])
   @@index([createdAt])
+  @@index([tenantId])
 }
 
 model ImportBatch {
   id                     String            @id @default(cuid())
+  tenantId               String?
+  tenant                 Tenant?           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   templateType           String
   fileName               String
   rowCount               Int
@@ -640,10 +805,13 @@ model ImportBatch {
   @@index([status, createdAt])
   @@index([templateType])
   @@index([validationStatus])
+  @@index([tenantId])
 }
 
 model OperationalAction {
   id              String                     @id @default(cuid())
+  tenantId        String?
+  tenant          Tenant?                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   title           String
   description     String
   category        OperationalActionCategory
@@ -672,10 +840,13 @@ model OperationalAction {
   @@index([category])
   @@index([branchId])
   @@index([assignedStaffId])
+  @@index([tenantId])
 }
 
 model Notification {
   id                 String                      @id @default(cuid())
+  tenantId           String?
+  tenant             Tenant?                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   type               NotificationType
   severity           NotificationSeverity        @default(INFO)
   status             NotificationStatus          @default(UNREAD)
@@ -708,10 +879,13 @@ model Notification {
   @@index([branchId])
   @@index([recipientStaffId])
   @@index([createdAt])
+  @@index([tenantId])
 }
 
 model OperationalActionActivity {
   id           String            @id @default(cuid())
+  tenantId     String?
+  tenant       Tenant?           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   actionId     String
   action       OperationalAction @relation(fields: [actionId], references: [id], onDelete: Cascade)
   activityType String
@@ -720,10 +894,13 @@ model OperationalActionActivity {
   createdAt    DateTime          @default(now())
 
   @@index([actionId, createdAt])
+  @@index([tenantId])
 }
 
 model Event {
   id                 String        @id @default(cuid())
+  tenantId           String?
+  tenant             Tenant?       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   title              String
   description        String
   eventType          EventType
@@ -770,10 +947,13 @@ model Event {
   @@index([branchId])
   @@index([ownerStaffId])
   @@index([fundingStatus])
+  @@index([tenantId])
 }
 
 model EventChecklistItem {
   id              String               @id @default(cuid())
+  tenantId        String?
+  tenant          Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   eventId         String
   event           Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
   category        String
@@ -793,10 +973,13 @@ model EventChecklistItem {
   @@index([eventId, status])
   @@index([assignedStaffId])
   @@index([operationalActionId])
+  @@index([tenantId])
 }
 
 model EventExpense {
   id               String             @id @default(cuid())
+  tenantId         String?
+  tenant           Tenant?            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   eventId          String
   event            Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
   category         String
@@ -811,10 +994,13 @@ model EventExpense {
   updatedAt        DateTime           @updatedAt
 
   @@index([eventId, status])
+  @@index([tenantId])
 }
 
 model EventActivity {
   id           String   @id @default(cuid())
+  tenantId     String?
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   eventId      String
   event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   activityType String
@@ -823,10 +1009,13 @@ model EventActivity {
   createdAt    DateTime @default(now())
 
   @@index([eventId, createdAt])
+  @@index([tenantId])
 }
 
 model EventReview {
   id                      String   @id @default(cuid())
+  tenantId                String?
+  tenant                  Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   eventId                 String   @unique
   event                   Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   attendance              Int
@@ -840,10 +1029,14 @@ model EventReview {
   mediaLinks              String?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
+
+  @@index([tenantId])
 }
 
 model Communication {
   id                  String                         @id @default(cuid())
+  tenantId            String?
+  tenant              Tenant?                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   channel             CommunicationChannel           @default(WHATSAPP)
   status              CommunicationStatus            @default(DRAFT)
   direction           CommunicationDirection         @default(OUTBOUND)
@@ -903,10 +1096,13 @@ model Communication {
   @@index([assignedStaffId])
   @@index([branchId])
   @@index([sendingOperatingUnitId])
+  @@index([tenantId])
 }
 
 model CommunicationActivity {
   id              String        @id @default(cuid())
+  tenantId        String?
+  tenant          Tenant?       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   communicationId String
   communication   Communication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
   activityType    String
@@ -915,10 +1111,13 @@ model CommunicationActivity {
   createdAt       DateTime      @default(now())
 
   @@index([communicationId, createdAt])
+  @@index([tenantId])
 }
 
 model OperatingUnit {
   id                       String                    @id @default(cuid())
+  tenantId                 String?
+  tenant                   Tenant?                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name                     String
   code                     String                    @unique
   type                     OperatingUnitType
@@ -953,10 +1152,13 @@ model OperatingUnit {
   @@index([type, status])
   @@index([branchId])
   @@index([managerStaffId])
+  @@index([tenantId])
 }
 
 model AppUser {
   id                     String                    @id @default(cuid())
+  tenantId               String?
+  tenant                 Tenant?                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name                   String
   email                  String                    @unique
   passwordHash           String
@@ -976,6 +1178,7 @@ model AppUser {
   sessions               AppSession[]
 
   @@index([status, role])
+  @@index([tenantId])
 }
 
 model UserOperatingUnitAccess {
@@ -1003,4 +1206,80 @@ model AppSession {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+model PlatformUser {
+  id               String             @id @default(cuid())
+  name             String
+  email            String             @unique
+  passwordHash     String
+  role             PlatformRole       @default(PLATFORM_VIEW_ONLY)
+  status           PlatformUserStatus @default(INVITED)
+  lastLoginAt      DateTime?
+  failedLoginCount Int                @default(0)
+  lockedUntil      DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  sessions         PlatformSession[]
+  supportRequests  TenantSupportAccessRequest[]
+
+  @@index([status, role])
+}
+
+model PlatformSession {
+  id             String       @id @default(cuid())
+  platformUserId String
+  platformUser   PlatformUser @relation(fields: [platformUserId], references: [id], onDelete: Cascade)
+  tokenHash      String       @unique
+  expiresAt      DateTime
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([platformUserId])
+  @@index([expiresAt])
+}
+
+model TenantSupportAccessRequest {
+  id                         String                    @id @default(cuid())
+  tenantId                   String
+  tenant                     Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  requestedByPlatformUserId  String
+  requestedByPlatformUser    PlatformUser              @relation(fields: [requestedByPlatformUserId], references: [id], onDelete: Cascade)
+  approvedByTenantUserId     String?
+  reason                     String
+  status                     TenantSupportAccessStatus @default(REQUESTED)
+  requestedAt                DateTime                  @default(now())
+  approvedAt                 DateTime?
+  expiresAt                  DateTime?
+  revokedAt                  DateTime?
+  scope                      TenantSupportAccessScope  @default(CONFIGURATION_ONLY)
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
+
+  @@index([tenantId, status])
+  @@index([requestedByPlatformUserId])
+  @@index([expiresAt])
+}
+
+model AuditLog {
+  id                     String         @id @default(cuid())
+  actorType              AuditActorType @default(SYSTEM)
+  actorId                String?
+  actorLabel             String?
+  tenantId               String?
+  tenant                 Tenant?        @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  action                 String
+  recordType             String?
+  recordId               String?
+  ipAddress              String?
+  userAgent              String?
+  supportAccessRequestId String?
+  outcome                String         @default("SUCCESS")
+  metadata               Json?
+  createdAt              DateTime       @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([actorType, actorId])
+  @@index([recordType, recordId])
+  @@index([action, createdAt])
 }

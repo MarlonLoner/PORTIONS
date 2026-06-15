@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
-import { UserStatus } from "@prisma/client";
+import { SubscriptionStatus, TenantStatus, UserStatus } from "@prisma/client";
 import { AUTH_SESSION_COOKIE, createUserSession, verifyPassword } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const lockoutFailures = 5;
 const lockoutMinutes = 15;
+const blockedTenantStatuses = new Set<TenantStatus>([TenantStatus.SUSPENDED, TenantStatus.DISABLED, TenantStatus.ARCHIVED]);
+const blockedSubscriptionStatuses = new Set<SubscriptionStatus>([SubscriptionStatus.CANCELLED, SubscriptionStatus.PAUSED]);
 
 function cleanString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -19,7 +21,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Email or password is not correct." }, { status: 401 });
     }
 
-    const user = await prisma.appUser.findUnique({ where: { email } });
+    const user = await prisma.appUser.findUnique({ where: { email }, include: { tenant: true } });
     if (!user) {
       return NextResponse.json({ error: "Email or password is not correct." }, { status: 401 });
     }
@@ -30,6 +32,9 @@ export async function POST(request: Request) {
 
     if (user.status !== UserStatus.ACTIVE) {
       return NextResponse.json({ error: "This account is not active." }, { status: 403 });
+    }
+    if (user.tenant && (blockedTenantStatuses.has(user.tenant.status) || blockedSubscriptionStatuses.has(user.tenant.subscriptionStatus))) {
+      return NextResponse.json({ error: "This pharmacy tenant is not active." }, { status: 403 });
     }
 
     if (!verifyPassword(password, user.passwordHash)) {

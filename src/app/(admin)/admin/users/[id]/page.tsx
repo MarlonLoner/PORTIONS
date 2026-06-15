@@ -7,27 +7,32 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 export default async function UserDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requirePermission("manageUsers");
+  const currentUser = await requirePermission("manageUsers");
   const { id } = await params;
   const [user, units] = await Promise.all([
-    prisma.appUser.findUnique({
-      where: { id },
+    prisma.appUser.findFirst({
+      where: { id, ...(currentUser.tenantId ? { tenantId: currentUser.tenantId } : {}) },
       include: { staffMember: true, primaryOperatingUnit: true, unitAccess: { include: { operatingUnit: true }, orderBy: { isPrimary: "desc" } } }
     }),
-    prisma.operatingUnit.findMany({ orderBy: { name: "asc" } })
+    prisma.operatingUnit.findMany({ where: currentUser.tenantId ? { tenantId: currentUser.tenantId } : undefined, orderBy: { name: "asc" } })
   ]);
   if (!user) notFound();
 
   async function updateUser(formData: FormData) {
     "use server";
-    await requirePermission("manageUsers");
-    await prisma.appUser.update({
-      where: { id },
+    const actor = await requirePermission("manageUsers");
+    const requestedPrimaryUnitId = optional(String(formData.get("primaryOperatingUnitId") ?? ""));
+    const primaryUnit = requestedPrimaryUnitId ? await prisma.operatingUnit.findFirst({
+      where: { id: requestedPrimaryUnitId, ...(actor.tenantId ? { tenantId: actor.tenantId } : {}) },
+      select: { id: true }
+    }) : null;
+    await prisma.appUser.updateMany({
+      where: { id, ...(actor.tenantId ? { tenantId: actor.tenantId } : {}) },
       data: {
         name: String(formData.get("name") ?? "").trim(),
         role: String(formData.get("role") ?? "VIEW_ONLY") as UserRole,
         status: String(formData.get("status") ?? "ACTIVE") as UserStatus,
-        primaryOperatingUnitId: optional(String(formData.get("primaryOperatingUnitId") ?? ""))
+        primaryOperatingUnitId: primaryUnit?.id ?? null
       }
     });
     redirect(`/admin/users/${id}`);
@@ -35,19 +40,24 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
 
   async function resetPassword(formData: FormData) {
     "use server";
-    await requirePermission("manageUsers");
+    const actor = await requirePermission("manageUsers");
     const password = String(formData.get("password") ?? "");
     if (password.length < 10) throw new Error("Password must be at least 10 characters.");
-    await prisma.appUser.update({ where: { id }, data: { passwordHash: hashPassword(password), mustChangePassword: true, failedLoginCount: 0, lockedUntil: null } });
+    await prisma.appUser.updateMany({ where: { id, ...(actor.tenantId ? { tenantId: actor.tenantId } : {}) }, data: { passwordHash: hashPassword(password), mustChangePassword: true, failedLoginCount: 0, lockedUntil: null } });
     await prisma.appSession.deleteMany({ where: { userId: id } });
     redirect(`/admin/users/${id}`);
   }
 
   async function addUnitAccess(formData: FormData) {
     "use server";
-    await requirePermission("manageUsers");
+    const actor = await requirePermission("manageUsers");
     const operatingUnitId = String(formData.get("operatingUnitId") ?? "");
     if (!operatingUnitId) return;
+    const [targetUser, unit] = await Promise.all([
+      prisma.appUser.findFirst({ where: { id, ...(actor.tenantId ? { tenantId: actor.tenantId } : {}) }, select: { id: true } }),
+      prisma.operatingUnit.findFirst({ where: { id: operatingUnitId, ...(actor.tenantId ? { tenantId: actor.tenantId } : {}) }, select: { id: true } })
+    ]);
+    if (!targetUser || !unit) return;
     const accessLevel = String(formData.get("accessLevel") ?? "VIEW") as OperatingUnitAccessLevel;
     const isPrimary = formData.get("isPrimary") === "on";
     await prisma.userOperatingUnitAccess.upsert({
@@ -55,7 +65,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
       update: { accessLevel, isPrimary },
       create: { userId: id, operatingUnitId, accessLevel, isPrimary }
     });
-    if (isPrimary) await prisma.appUser.update({ where: { id }, data: { primaryOperatingUnitId: operatingUnitId } });
+    if (isPrimary) await prisma.appUser.updateMany({ where: { id, ...(actor.tenantId ? { tenantId: actor.tenantId } : {}) }, data: { primaryOperatingUnitId: operatingUnitId } });
     redirect(`/admin/users/${id}`);
   }
 
