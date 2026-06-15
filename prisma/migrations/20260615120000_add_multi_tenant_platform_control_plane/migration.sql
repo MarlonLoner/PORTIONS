@@ -124,38 +124,52 @@ ALTER TABLE "AppUser" ADD COLUMN "tenantId" TEXT;
 INSERT INTO "Tenant" (
   "id", "name", "slug", "legalName", "status", "plan", "country", "timezone", "currency",
   "subscriptionStatus", "activatedAt", "isDemoTenant", "updatedAt"
-) VALUES
-  (
-    'tenant_portions_primary',
-    'PORTIONS Demonstration Pharmacy',
-    'portions-demo-pharmacy',
-    'PORTIONS Demonstration Pharmacy',
-    'ACTIVE',
-    'PILOT',
-    'Zimbabwe',
-    'Africa/Harare',
-    'USD',
-    'ACTIVE',
-    CURRENT_TIMESTAMP,
-    false,
-    CURRENT_TIMESTAMP
-  ),
-  (
-    'tenant_portions_demo',
-    'PORTIONS Demo Tenant',
-    'portions-demo',
-    'PORTIONS Demo Tenant',
-    'ACTIVE',
-    'DEMO',
-    'Zimbabwe',
-    'Africa/Harare',
-    'USD',
-    'NOT_REQUIRED',
-    CURRENT_TIMESTAMP,
-    true,
-    CURRENT_TIMESTAMP
-  )
-ON CONFLICT ("slug") DO NOTHING;
+)
+SELECT
+  'tenant_portions_primary',
+  'PORTIONS Demonstration Pharmacy',
+  'portions-demo-pharmacy',
+  'PORTIONS Demonstration Pharmacy',
+  'ACTIVE'::"TenantStatus",
+  'PILOT'::"TenantPlan",
+  'Zimbabwe',
+  'Africa/Harare',
+  'USD',
+  'ACTIVE'::"SubscriptionStatus",
+  CURRENT_TIMESTAMP,
+  false,
+  CURRENT_TIMESTAMP
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM "Tenant"
+  WHERE "id" = 'tenant_portions_primary'
+     OR "slug" = 'portions-demo-pharmacy'
+);
+
+INSERT INTO "Tenant" (
+  "id", "name", "slug", "legalName", "status", "plan", "country", "timezone", "currency",
+  "subscriptionStatus", "activatedAt", "isDemoTenant", "updatedAt"
+)
+SELECT
+  'tenant_portions_demo',
+  'PORTIONS Demo Tenant',
+  'portions-demo',
+  'PORTIONS Demo Tenant',
+  'ACTIVE'::"TenantStatus",
+  'DEMO'::"TenantPlan",
+  'Zimbabwe',
+  'Africa/Harare',
+  'USD',
+  'NOT_REQUIRED'::"SubscriptionStatus",
+  CURRENT_TIMESTAMP,
+  true,
+  CURRENT_TIMESTAMP
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM "Tenant"
+  WHERE "id" = 'tenant_portions_demo'
+     OR "slug" = 'portions-demo'
+);
 
 UPDATE "Branch" SET "tenantId" = 'tenant_portions_primary' WHERE "tenantId" IS NULL;
 UPDATE "StaffMember" SET "tenantId" = 'tenant_portions_primary' WHERE "tenantId" IS NULL;
