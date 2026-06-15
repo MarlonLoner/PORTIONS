@@ -63,6 +63,16 @@ export async function createTenantOwnerInvitation(tenantId: string, input: Tenan
     });
     if (activeOwner) throw new Error("This tenant already has an active owner.");
 
+    await tx.tenantUserInvitation.updateMany({
+      where: {
+        tenantId,
+        role: UserRole.OWNER,
+        status: TenantUserInvitationStatus.PENDING,
+        expiresAt: { lte: now }
+      },
+      data: { status: TenantUserInvitationStatus.EXPIRED }
+    });
+
     const pendingOwnerInvite = await tx.tenantUserInvitation.findFirst({
       where: {
         tenantId,
@@ -101,10 +111,10 @@ export async function createTenantOwnerInvitation(tenantId: string, input: Tenan
       }
     });
 
-    return created;
+    return { created, tenant };
   });
 
-  return { invitation, token };
+  return { invitation: invitation.created, tenant: invitation.tenant, token };
 }
 
 export async function revokeTenantOwnerInvitation(tenantId: string, invitationId: string, actor: CurrentPlatformUser) {

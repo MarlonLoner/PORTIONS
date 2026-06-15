@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { requirePlatformUser } from "@/lib/platform-auth";
 import { getTenantControlPlaneDetail } from "@/lib/platform";
 import { TenantOwnerInvitationForm } from "@/components/tenant-owner-invitation-form";
+import { isInvitationEmailConfigured } from "@/lib/invitation-delivery";
 import { createOwnerInvitationAction, revokeOwnerInvitationAction } from "./actions";
 
 export default async function PlatformTenantDetailPage({
@@ -38,6 +39,7 @@ export default async function PlatformTenantDetailPage({
   const provisioningStatus = getProvisioningStatus({ activeOwner: Boolean(activeOwner), pendingInvitation: Boolean(pendingInvitation), complete: provisioningComplete === provisioningSteps.length });
   const createOwnerInvitation = createOwnerInvitationAction.bind(null, tenant.id);
   const revokeOwnerInvitation = revokeOwnerInvitationAction.bind(null, tenant.id);
+  const emailConfigured = isInvitationEmailConfigured();
 
   return (
     <>
@@ -94,27 +96,14 @@ export default async function PlatformTenantDetailPage({
                 Tenant administration has been handed to the pharmacy owner. Platform users can monitor setup state and support access, but ordinary tenant staff management belongs inside the tenant admin area.
               </p>
             </div>
-          ) : pendingInvitation ? (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-              <p className="text-sm font-semibold text-amber-950">Owner invitation pending</p>
-              <p className="mt-2 text-lg font-semibold text-navy-950">{pendingInvitation.name}</p>
-              <p className="mt-1 text-sm text-amber-800">{pendingInvitation.email} / status PENDING / expires {pendingInvitation.expiresAt.toLocaleString()}</p>
-              <p className="mt-3 rounded-lg bg-white/70 px-3 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-100">
-                Delivery: Manual handoff. The one-time link was only available when this invitation was created.
-              </p>
-              <p className="mt-2 text-sm leading-6 text-amber-800">
-                If the original link was not copied, revoke this invitation and create a replacement. PORTIONS cannot reconstruct the old token from its stored hash.
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <form action={revokeOwnerInvitation}>
-                  <input type="hidden" name="invitationId" value={pendingInvitation.id} />
-                  <button className="focus-ring rounded-lg bg-white px-3 py-2 text-xs font-semibold text-rose-700 ring-1 ring-rose-100">Revoke Invitation</button>
-                </form>
-                <button disabled className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-slate-100">Email delivery not configured</button>
-                <button disabled className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-500 ring-1 ring-slate-100">Create replacement after revoke</button>
-              </div>
-            </div>
-          ) : <TenantOwnerInvitationForm action={createOwnerInvitation} />}
+          ) : (
+            <TenantOwnerInvitationForm
+              action={createOwnerInvitation}
+              revokeAction={revokeOwnerInvitation}
+              pendingInvitation={pendingInvitation}
+              emailConfigured={emailConfigured}
+            />
+          )}
           {tenant.userInvitations.length ? (
             <div className="grid gap-3">
               {tenant.userInvitations.map((invitation) => (

@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { PlatformRole } from "@prisma/client";
 import { requirePlatformUser } from "@/lib/platform-auth";
-import { createManualInvitationDelivery } from "@/lib/invitation-delivery";
+import { createManualInvitationDelivery, isInvitationEmailConfigured, sendInvitationEmail } from "@/lib/invitation-delivery";
 import { createTenantOwnerInvitation, revokeTenantOwnerInvitation } from "@/lib/tenant-invitations";
+import { prisma } from "@/lib/prisma";
 
 export type OwnerInvitationState =
   | {
@@ -13,7 +14,11 @@ export type OwnerInvitationState =
       invitationId: string;
       invitationUrl: string;
       expiresAt: string;
-      deliveryMode: "MANUAL";
+      deliveryMode: "MANUAL" | "EMAIL";
+      deliveryStatus: "CREATED" | "SENT" | "FAILED" | "NOT_CONFIGURED";
+      recipientEmail: string;
+      providerMessageId?: string;
+      deliveryError?: string;
       error?: "";
     }
   | {
@@ -29,16 +34,53 @@ export async function createOwnerInvitationAction(tenantId: string, _state: Owne
   const actor = await requirePlatformUser([PlatformRole.PLATFORM_OWNER, PlatformRole.PLATFORM_ADMIN]);
   const name = clean(formData.get("name"));
   const email = clean(formData.get("email"));
+  const deliveryMethod = clean(formData.get("deliveryMethod")) === "EMAIL" ? "EMAIL" : "MANUAL";
   try {
+    if (deliveryMethod === "EMAIL" && !isInvitationEmailConfigured()) {
+      return { ok: false, error: "Email delivery is not configured. Use Copy secure link." };
+    }
     const result = await createTenantOwnerInvitation(tenantId, { name, email }, actor);
-    const delivery = createManualInvitationDelivery();
-    revalidatePath(`/platform/tenants/${tenantId}`);
+    const invitationUrl = `${await getRequestOrigin()}/tenant-invite/${result.token}`;
+    const delivery = deliveryMethod === "EMAIL"
+      ? await sendInvitationEmail({
+          recipientName: result.invitation.name,
+          recipientEmail: result.invitation.email,
+          tenantName: result.tenant.name,
+          invitationUrl,
+          expiresAt: result.invitation.expiresAt
+        })
+      : createManualInvitationDelivery();
+
+    await prisma.auditLog.create({
+      data: {
+        tenantId,
+        actorType: "PLATFORM_USER",
+        actorId: actor.id,
+        actorLabel: `${actor.name} (${actor.role})`,
+        action: delivery.mode === "EMAIL" ? "tenant.owner_invitation.email_delivery" : "tenant.owner_invitation.manual_delivery",
+        recordType: "TenantUserInvitation",
+        recordId: result.invitation.id,
+        outcome: delivery.ok ? "SUCCESS" : "FAILED",
+        metadata: {
+          deliveryMode: delivery.mode,
+          deliveryStatus: delivery.status,
+          providerMessageId: delivery.providerMessageId,
+          error: delivery.error,
+          recipientEmail: result.invitation.email
+        }
+      }
+    });
+
     return {
       ok: true,
       invitationId: result.invitation.id,
-      invitationUrl: `${await getRequestOrigin()}/tenant-invite/${result.token}`,
+      invitationUrl,
       expiresAt: result.invitation.expiresAt.toISOString(),
-      deliveryMode: delivery.mode
+      deliveryMode: delivery.mode,
+      deliveryStatus: delivery.status,
+      recipientEmail: result.invitation.email,
+      providerMessageId: delivery.providerMessageId,
+      deliveryError: delivery.error
     };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Owner invitation could not be created." };
