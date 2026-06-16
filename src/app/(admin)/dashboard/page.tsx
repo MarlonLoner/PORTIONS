@@ -1,3 +1,4 @@
+import { ImportBatchStatus } from "@prisma/client";
 import {
   Activity,
   AlertTriangle,
@@ -8,6 +9,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   CreditCard,
+  FileSpreadsheet,
   KeyRound,
   LineChart,
   MessageSquareWarning,
@@ -19,6 +21,7 @@ import {
   Smartphone,
   Target,
   TrendingUp,
+  UploadCloud,
   UserPlus,
   UsersRound
 } from "lucide-react";
@@ -37,7 +40,7 @@ import {
 import { getEscalationAiSummary, getNotificationSummary } from "@/lib/notifications";
 import { getCommunicationMetrics } from "@/lib/communications";
 import { getEventMetrics, getEventNextAction, getEventReadinessSummary } from "@/lib/events";
-import { canManageSettings, canManageUsers, getCurrentAccessUser } from "@/lib/auth";
+import { canImportData, canManageSettings, canManageUsers, getCurrentAccessUser } from "@/lib/auth";
 import { getAdminControlCenterMetrics } from "@/lib/admin-user-creation";
 import { prisma } from "@/lib/prisma";
 
@@ -47,8 +50,10 @@ export default async function DashboardPage() {
   const data = await getDashboardData();
   const user = await getCurrentAccessUser();
   const showAdminControl = user ? canManageUsers(user) || canManageSettings(user) : false;
+  const showImportCommand = user ? canImportData(user) : false;
   const adminMetrics = showAdminControl ? await getAdminControlCenterMetrics() : null;
   const setupCounts = user?.tenantId ? await getTenantSetupCounts(user.tenantId) : null;
+  const importSnapshot = showImportCommand && user?.tenantId ? await getDashboardImportSnapshot(user.tenantId) : null;
   const showSetupPanel = setupCounts ? setupCounts.branches === 0 || setupCounts.stockItems === 0 || setupCounts.patients === 0 || setupCounts.staffMembers === 0 || setupCounts.orders === 0 : false;
   const communicationMetrics = await getCommunicationMetrics();
   const maxRevenue = Math.max(...data.revenueByBranch.map((branch) => branch.revenue), 1);
@@ -147,13 +152,73 @@ export default async function DashboardPage() {
             </div>
             <Link href="/onboarding" className="focus-ring rounded-lg bg-navy-950 px-4 py-2.5 text-sm font-semibold text-white">Continue onboarding</Link>
           </div>
-          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <div className={showImportCommand ? "mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-7" : "mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6"}>
             <SetupCard title="Create first branch" status={setupCounts.branches > 0 ? "Complete" : "Start here"} href="/branches/new" detail={`${setupCounts.branches} branches`} icon={<Building2 className="h-4 w-4" />} />
             <SetupCard title="Add pharmacy team" status={setupCounts.staffMembers > 0 ? "Complete" : "Needed"} href="/admin/staff/new" detail={`${setupCounts.staffMembers} staff records`} icon={<UsersRound className="h-4 w-4" />} />
+            {showImportCommand ? (
+              <SetupCard
+                title="Import pharmacy data"
+                status={importSnapshot && importSnapshot.totalBatches > 0 ? "Started" : "Recommended"}
+                href="/imports"
+                detail={`${importSnapshot?.totalBatches ?? 0} batches saved`}
+                icon={<FileSpreadsheet className="h-4 w-4" />}
+              />
+            ) : null}
             <SetupCard title="Add or import patients" status={setupCounts.patients > 0 ? "Complete" : "Needed"} href="/patients/new" detail={`${setupCounts.patients} patient records`} icon={<UserPlus className="h-4 w-4" />} />
             <SetupCard title="Add or import stock" status={setupCounts.stockItems > 0 ? "Complete" : "Needed"} href="/stock/new" detail={`${setupCounts.stockItems} stock records`} icon={<PackageCheck className="h-4 w-4" />} />
             <SetupCard title="Configure WhatsApp" status={setupCounts.unitsWithWhatsapp > 0 ? "Started" : "Needed"} href="/admin/operating-units" detail={`${setupCounts.unitsWithWhatsapp} units configured`} icon={<Smartphone className="h-4 w-4" />} />
             <SetupCard title="Review operating units" status={setupCounts.operatingUnits > 0 ? "Ready" : "Needed"} href="/admin/operating-units" detail={`${setupCounts.operatingUnits} units`} icon={<Settings2 className="h-4 w-4" />} />
+          </div>
+        </section>
+      ) : null}
+
+      {showImportCommand && importSnapshot ? (
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-700">Data onboarding</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy-950">Import Data</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                Upload branches, staff, patients, stock, orders, or follow-up records using PORTIONS templates. Review saved batches before approval or execution.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/imports" className="focus-ring rounded-lg bg-navy-950 px-4 py-2.5 text-sm font-semibold text-white">Open Imports</Link>
+              <Link href="/imports/upload" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700">
+                <UploadCloud className="h-4 w-4" aria-hidden="true" />
+                Upload CSV
+              </Link>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-4 xl:grid-cols-[0.88fr_1.12fr]">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <MiniExecMetric label="Saved batches" value={String(importSnapshot.totalBatches)} />
+              <MiniExecMetric label="Needs review" value={String(importSnapshot.needsReview)} tone={importSnapshot.needsReview > 0 ? "warn" : "normal"} />
+              <MiniExecMetric label="Imported" value={String(importSnapshot.imported)} tone={importSnapshot.imported > 0 ? "success" : "normal"} />
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-navy-950">Recent import batches</p>
+                <Link href="/imports/batches" className="text-xs font-semibold text-clinical-700 hover:text-clinical-800">Review batches</Link>
+              </div>
+              <div className="mt-4 space-y-3">
+                {importSnapshot.recentBatches.length > 0 ? (
+                  importSnapshot.recentBatches.map((batch) => (
+                    <ImportBatchRow
+                      key={batch.id}
+                      label={formatImportTemplateLabel(batch.templateType)}
+                      fileName={batch.fileName}
+                      readinessScore={batch.readinessScore}
+                      status={batch.status}
+                    />
+                  ))
+                ) : (
+                  <p className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm leading-6 text-slate-500">
+                    No import batches have been saved yet. Open Imports to start with branches, staff, patients, stock, orders, or follow-up data.
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
         </section>
       ) : null}
@@ -541,6 +606,33 @@ async function getTenantSetupCounts(tenantId: string) {
   return { branches, staffMembers, patients, stockItems, orders, operatingUnits, unitsWithWhatsapp };
 }
 
+async function getDashboardImportSnapshot(tenantId: string) {
+  const [totalBatches, needsReview, imported, recentBatches] = await Promise.all([
+    prisma.importBatch.count({ where: { tenantId } }),
+    prisma.importBatch.count({
+      where: {
+        tenantId,
+        status: { in: [ImportBatchStatus.NEEDS_CLEANUP, ImportBatchStatus.READY, ImportBatchStatus.APPROVED] }
+      }
+    }),
+    prisma.importBatch.count({ where: { tenantId, status: ImportBatchStatus.IMPORTED } }),
+    prisma.importBatch.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: "desc" },
+      take: 4,
+      select: {
+        id: true,
+        templateType: true,
+        fileName: true,
+        readinessScore: true,
+        status: true
+      }
+    })
+  ]);
+
+  return { totalBatches, needsReview, imported, recentBatches };
+}
+
 function SetupCard({ title, status, detail, href, icon }: { title: string; status: string; detail: string; href: string; icon: ReactNode }) {
   const complete = ["Complete", "Ready", "Started"].includes(status);
   return (
@@ -551,6 +643,51 @@ function SetupCard({ title, status, detail, href, icon }: { title: string; statu
       <p className="mt-1 text-xs text-slate-500">{detail}</p>
     </Link>
   );
+}
+
+function ImportBatchRow({
+  label,
+  fileName,
+  readinessScore,
+  status
+}: {
+  label: string;
+  fileName: string;
+  readinessScore: number;
+  status: ImportBatchStatus;
+}) {
+  const toneClass =
+    status === ImportBatchStatus.IMPORTED
+      ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+      : status === ImportBatchStatus.APPROVED
+        ? "bg-clinical-50 text-clinical-800 ring-clinical-100"
+        : status === ImportBatchStatus.READY
+          ? "bg-sky-50 text-sky-700 ring-sky-100"
+          : status === ImportBatchStatus.NEEDS_CLEANUP
+            ? "bg-amber-50 text-amber-700 ring-amber-100"
+            : "bg-slate-100 text-slate-700 ring-slate-200";
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-navy-950">{label}</p>
+        <p className="truncate text-xs text-slate-500">{fileName}</p>
+      </div>
+      <div className="shrink-0 text-right">
+        <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] ring-1 ${toneClass}`}>
+          {status.replace(/_/g, " ")}
+        </span>
+        <p className="mt-1 text-xs text-slate-500">{readinessScore}% readiness</p>
+      </div>
+    </div>
+  );
+}
+
+function formatImportTemplateLabel(templateType: string) {
+  return templateType
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function BriefPoint({

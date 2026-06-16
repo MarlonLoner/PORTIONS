@@ -1,12 +1,15 @@
 import { ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/login-form";
-import { hasActiveAdministrativeUser } from "@/lib/auth";
+import { getCurrentUser, hasActiveAdministrativeUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function LoginPage() {
+  const currentUser = await getCurrentUser();
+  if (currentUser) redirect("/dashboard");
   const initialized = await hasActiveAdministrativeUser();
 
   return (
@@ -31,7 +34,7 @@ export default async function LoginPage() {
         <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-soft">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-700">PORTIONS Account</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy-950">Email and password</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">Use your assigned PORTIONS account. Demo walkthroughs can still use the existing demo access code.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Use your assigned PORTIONS account. New to PORTIONS? Explore the demo first, then return here when your pharmacy login is ready.</p>
           {!initialized ? (
             <div className="mt-5 rounded-lg bg-amber-50 p-4 ring-1 ring-amber-100">
               <p className="text-sm font-semibold text-amber-900">PORTIONS has not been initialized yet.</p>
@@ -41,9 +44,10 @@ export default async function LoginPage() {
           <Suspense fallback={<div className="mt-6 h-48 rounded-lg bg-slate-50 ring-1 ring-slate-200" />}>
             <LoginForm />
           </Suspense>
+          <p className="mt-5 text-sm leading-6 text-slate-500">New to PORTIONS? Explore the demo, then come back when your pharmacy team is ready for account access.</p>
           <div className="mt-5 flex flex-wrap gap-2">
-            <Link href="/enter" className="focus-ring rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">Use demo access</Link>
-            <Link href="/" className="focus-ring rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">Back to landing</Link>
+            <Link href="/enter" className="focus-ring rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">Try the demo</Link>
+            <Link href="/" className="focus-ring rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">Back to PORTIONS homepage</Link>
           </div>
         </div>
       </section>

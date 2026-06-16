@@ -1,7 +1,15 @@
-import { Bot, CheckCircle2, FileSpreadsheet, ShieldCheck, UploadCloud } from "lucide-react";
+import { AlertTriangle, Bot, CheckCircle2, Database, FileSpreadsheet, ShieldCheck, UploadCloud } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ImportTemplateActions } from "@/components/import-template-actions";
+import { getImportBatchesData } from "@/lib/data";
+import {
+  getImportBatchAiSummary,
+  getImportBatchMetrics,
+  getImportBatchStatus,
+  importBatchStatusClasses,
+  importBatchStatusLabels,
+} from "@/lib/import-batches";
 import {
   getAiImportAdvisor,
   getDataQualityRules,
@@ -33,6 +41,29 @@ export default function ImportsPage() {
   const rules = getDataQualityRules();
   const flow = getImportFlowSteps();
   const advisor = getAiImportAdvisor();
+  const batchesPromise = getImportBatchesData();
+
+  return <ImportsPageContent overview={overview} templates={templates} rules={rules} flow={flow} advisor={advisor} batchesPromise={batchesPromise} />;
+}
+
+async function ImportsPageContent({
+  overview,
+  templates,
+  rules,
+  flow,
+  advisor,
+  batchesPromise
+}: {
+  overview: ReturnType<typeof getImportOverview>;
+  templates: ReturnType<typeof getImportTemplates>;
+  rules: ReturnType<typeof getDataQualityRules>;
+  flow: ReturnType<typeof getImportFlowSteps>;
+  advisor: string;
+  batchesPromise: ReturnType<typeof getImportBatchesData>;
+}) {
+  const batches = await batchesPromise;
+  const batchMetrics = getImportBatchMetrics(batches);
+  const recentBatches = batches.slice(0, 4);
 
   return (
     <div className="space-y-6">
@@ -48,10 +79,16 @@ export default function ImportsPage() {
             <p className="mt-4 max-w-3xl text-base leading-7 text-slate-200">
               Prepare pharmacy data for chronic patients, stock, branches, staff, orders, and follow-up workflows before launching a PORTIONS pilot.
             </p>
-            <Link href="/imports/upload" className="focus-ring mt-7 inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-navy-950 transition hover:bg-clinical-50">
-              <UploadCloud className="h-4 w-4" aria-hidden="true" />
-              Upload CSV for Preview
-            </Link>
+            <div className="mt-7 flex flex-wrap gap-3">
+              <Link href="/imports/upload" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-navy-950 transition hover:bg-clinical-50">
+                <UploadCloud className="h-4 w-4" aria-hidden="true" />
+                Upload CSV batch
+              </Link>
+              <Link href="/imports/batches" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2.5 text-sm font-semibold text-white ring-1 ring-white/15 transition hover:bg-white/15">
+                <Database className="h-4 w-4" aria-hidden="true" />
+                Review import batches
+              </Link>
+            </div>
           </div>
 
           <div className="rounded-lg border border-white/10 bg-white/10 p-4">
@@ -72,6 +109,72 @@ export default function ImportsPage() {
         <HeroMetric label="Estimated setup time" value={overview.estimatedSetupTime} />
         <HeroMetric label="Readiness score" value={`${overview.dataReadinessScore}%`} />
         <HeroMetric label="Next action" value={overview.suggestedNextAction} />
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
+        <Panel title="Import Command" eyebrow="Start here" icon={<UploadCloud className="h-5 w-5" />}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ActionTile
+              title="Upload new batch"
+              description="Preview headers, row quality, branch naming, dates, and numeric fields before any pilot import approval."
+              href="/imports/upload"
+              cta="Open upload preview"
+            />
+            <ActionTile
+              title="Review saved batches"
+              description="Track readiness, cleanup issues, approvals, and imported history from one batch review queue."
+              href="/imports/batches"
+              cta="Open batch review"
+            />
+          </div>
+          <div className="mt-4 rounded-lg bg-clinical-50 p-4 ring-1 ring-clinical-100">
+            <p className="text-sm font-semibold text-clinical-900">Supported data types</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {templates.map((template) => (
+                <span key={template.id} className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-clinical-800 ring-1 ring-clinical-100">
+                  {template.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        </Panel>
+
+        <Panel title="Recent Batch Status" eyebrow="Review requirements" icon={<AlertTriangle className="h-5 w-5" />}>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <MiniMetric label="Saved batches" value={String(batchMetrics.totalBatches)} />
+            <MiniMetric label="Needs cleanup" value={String(batchMetrics.needsCleanup)} />
+            <MiniMetric label="Approved" value={String(batchMetrics.approved)} />
+          </div>
+          <div className="mt-4 space-y-3">
+            {recentBatches.length > 0 ? (
+              recentBatches.map((batch) => {
+                const status = getImportBatchStatus(batch);
+                return (
+                  <div key={batch.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-navy-950">{formatTemplateName(batch.templateType)}</p>
+                        <p className="mt-1 text-xs text-slate-500">{batch.fileName}</p>
+                      </div>
+                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] ring-1 ${importBatchStatusClasses[status]}`}>
+                        {importBatchStatusLabels[status]}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-slate-600">{getImportBatchAiSummary(batch)}</p>
+                    <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-500">
+                      <span>{batch.rowCount} rows</span>
+                      <span>{batch.readinessScore}% readiness</span>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-5 text-sm leading-6 text-slate-500">
+                No import batches have been saved yet. Upload a CSV batch to start validation and pilot cleanup review.
+              </p>
+            )}
+          </div>
+        </Panel>
       </section>
 
       <section className="space-y-4">
@@ -164,6 +267,35 @@ export default function ImportsPage() {
       </section>
     </div>
   );
+}
+
+function ActionTile({
+  title,
+  description,
+  href,
+  cta
+}: {
+  title: string;
+  description: string;
+  href: string;
+  cta: string;
+}) {
+  return (
+    <article className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <h3 className="text-base font-semibold text-navy-950">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+      <Link href={href} className="focus-ring mt-4 inline-flex rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">
+        {cta}
+      </Link>
+    </article>
+  );
+}
+
+function formatTemplateName(templateType: string) {
+  return templateType
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function HeroMetric({ label, value }: { label: string; value: string }) {

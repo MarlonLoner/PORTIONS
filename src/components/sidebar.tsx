@@ -28,25 +28,25 @@ import { usePathname } from "next/navigation";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/demo", label: "Demo", icon: Presentation },
-  { href: "/demo-script", label: "Demo Script", icon: Presentation },
+  { href: "/ai-brief", label: "AI Brief", icon: Bot },
   { href: "/patients", label: "Chronic Patients", icon: UsersRound },
   { href: "/follow-ups", label: "Follow-Up Queue", icon: ClipboardList },
+  { href: "/orders", label: "Orders", icon: ShoppingBag },
+  { href: "/branches", label: "Branches", icon: Building2 },
+  { href: "/stock", label: "Stock Intelligence", icon: PackageSearch },
+  { href: "/imports", label: "Imports", icon: FileSpreadsheet },
+  { href: "/imports/batches", label: "Import Batches", icon: Database },
   { href: "/action-center", label: "Action Center", icon: ClipboardCheck },
   { href: "/notifications", label: "Notifications", icon: BellRing },
   { href: "/communications", label: "Communications", icon: MessageSquareText },
   { href: "/events", label: "Events", icon: CalendarDays },
-  { href: "/orders", label: "Orders", icon: ShoppingBag },
-  { href: "/branches", label: "Branches", icon: Building2 },
-  { href: "/stock", label: "Stock Intelligence", icon: PackageSearch },
-  { href: "/ai-brief", label: "AI Brief", icon: Bot },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/pilot-requests", label: "Pilot Requests", icon: ClipboardList },
   { href: "/pilot-command", label: "Pilot Command", icon: Flag },
   { href: "/executive-pack", label: "Executive Pack", icon: FileText },
   { href: "/onboarding", label: "Onboarding", icon: ClipboardCheck },
-  { href: "/imports", label: "Imports", icon: FileSpreadsheet },
-  { href: "/imports/batches", label: "Import Batches", icon: Database },
+  { href: "/demo", label: "Demo", icon: Presentation },
+  { href: "/demo-script", label: "Demo Script", icon: Presentation },
   { href: "/admin/users", label: "Users", icon: KeyRound },
   { href: "/admin/operating-units", label: "Operating Units", icon: Building2 },
   { href: "/account", label: "Account", icon: UsersRound },
@@ -79,7 +79,7 @@ export function Sidebar({
           <p className="text-xs text-clinical-200">Pharmacy Command OS</p>
         </div>
       </div>
-      <nav className="flex-1 space-y-1 px-4 py-4">
+      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-4 py-4">
         {items.map((item) => {
           const Icon = item.icon;
           const active = isActivePath(pathname, item.href);

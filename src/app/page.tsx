@@ -76,17 +76,22 @@ export default function LandingPage() {
               <p className="text-xs text-slate-500">Pharmacy Command OS</p>
             </div>
           </Link>
-          <nav className="hidden items-center gap-2 md:flex">
-            <Link href="/demo" className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-navy-950">
-              Demo
+          <div className="flex items-center gap-2">
+            <Link href="/login" className="focus-ring rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-navy-950 transition hover:bg-slate-50">
+              Pharmacy Login
             </Link>
-            <Link href="/enter" className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-navy-950">
-              Enter Command OS
-            </Link>
-            <Link href="/pilot" className="rounded-lg bg-navy-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-navy-800">
-              Request Pilot
-            </Link>
-          </nav>
+            <nav className="hidden items-center gap-2 md:flex">
+              <Link href="/demo" className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-navy-950">
+                Explore PORTIONS
+              </Link>
+              <Link href="/enter" className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-navy-950">
+                Demo Access
+              </Link>
+              <Link href="/pilot" className="rounded-lg bg-navy-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-navy-800">
+                Request Pilot
+              </Link>
+            </nav>
+          </div>
         </div>
       </header>
 
@@ -107,10 +112,14 @@ export default function LandingPage() {
               Built for multi-branch pharmacies that need executive visibility, patient retention, and operational discipline without waiting for manual reports.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Cta href="/demo" label="View Demo" primary />
-              <Cta href="/enter" label="Enter Command OS" />
+              <Cta href="/demo" label="Explore PORTIONS" primary />
+              <Cta href="/login" label="Already have an account? Log in" />
+              <Cta href="/enter" label="Demo Access" />
               <Cta href="/pilot" label="Request Pilot" />
             </div>
+            <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-300">
+              Pharmacy teams sign in through account login. Guided walkthroughs use demo access. Platform access remains separate for the PORTIONS team.
+            </p>
           </div>
 
           <div className="rounded-lg border border-white/10 bg-white/10 p-5 shadow-[0_28px_80px_rgba(0,0,0,0.22)]">
@@ -206,6 +215,15 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      <footer className="border-t border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 text-sm text-slate-500 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+          <p>PORTIONS helps pharmacy owners control patients, branches, orders, stock, and daily execution from one command layer.</p>
+          <Link href="/platform/login" className="font-semibold text-slate-500 transition hover:text-navy-950">
+            Platform Login
+          </Link>
+        </div>
+      </footer>
     </main>
   );
 }
