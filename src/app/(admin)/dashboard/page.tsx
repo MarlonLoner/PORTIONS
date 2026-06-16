@@ -39,6 +39,7 @@ import { getCommunicationMetrics } from "@/lib/communications";
 import { getEventMetrics, getEventNextAction, getEventReadinessSummary } from "@/lib/events";
 import { canManageSettings, canManageUsers, getCurrentAccessUser } from "@/lib/auth";
 import { getAdminControlCenterMetrics } from "@/lib/admin-user-creation";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,8 @@ export default async function DashboardPage() {
   const user = await getCurrentAccessUser();
   const showAdminControl = user ? canManageUsers(user) || canManageSettings(user) : false;
   const adminMetrics = showAdminControl ? await getAdminControlCenterMetrics() : null;
+  const setupCounts = user?.tenantId ? await getTenantSetupCounts(user.tenantId) : null;
+  const showSetupPanel = setupCounts ? setupCounts.branches === 0 || setupCounts.stockItems === 0 || setupCounts.patients === 0 || setupCounts.staffMembers === 0 || setupCounts.orders === 0 : false;
   const communicationMetrics = await getCommunicationMetrics();
   const maxRevenue = Math.max(...data.revenueByBranch.map((branch) => branch.revenue), 1);
   const topUrgency = [...data.followUpUrgency].sort((a, b) => b.count - a.count)[0];
@@ -131,6 +134,29 @@ export default async function DashboardPage() {
           </div>
         </div>
       </section>
+
+      {showSetupPanel && setupCounts ? (
+        <section className="rounded-lg border border-clinical-200 bg-clinical-50 p-5 shadow-soft">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-800">First-use setup</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy-950">Set up your pharmacy</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-clinical-900">
+                Your pharmacy workspace is ready. Start by creating your first branch, then add team members, patients, stock, and order flow.
+              </p>
+            </div>
+            <Link href="/onboarding" className="focus-ring rounded-lg bg-navy-950 px-4 py-2.5 text-sm font-semibold text-white">Continue onboarding</Link>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+            <SetupCard title="Create first branch" status={setupCounts.branches > 0 ? "Complete" : "Start here"} href="/branches/new" detail={`${setupCounts.branches} branches`} icon={<Building2 className="h-4 w-4" />} />
+            <SetupCard title="Add pharmacy team" status={setupCounts.staffMembers > 0 ? "Complete" : "Needed"} href="/admin/staff/new" detail={`${setupCounts.staffMembers} staff records`} icon={<UsersRound className="h-4 w-4" />} />
+            <SetupCard title="Add or import patients" status={setupCounts.patients > 0 ? "Complete" : "Needed"} href="/patients/new" detail={`${setupCounts.patients} patient records`} icon={<UserPlus className="h-4 w-4" />} />
+            <SetupCard title="Add or import stock" status={setupCounts.stockItems > 0 ? "Complete" : "Needed"} href="/stock/new" detail={`${setupCounts.stockItems} stock records`} icon={<PackageCheck className="h-4 w-4" />} />
+            <SetupCard title="Configure WhatsApp" status={setupCounts.unitsWithWhatsapp > 0 ? "Started" : "Needed"} href="/admin/operating-units" detail={`${setupCounts.unitsWithWhatsapp} units configured`} icon={<Smartphone className="h-4 w-4" />} />
+            <SetupCard title="Review operating units" status={setupCounts.operatingUnits > 0 ? "Ready" : "Needed"} href="/admin/operating-units" detail={`${setupCounts.operatingUnits} units`} icon={<Settings2 className="h-4 w-4" />} />
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard title="Today's total revenue" value={formatCurrency(data.totalRevenueToday)} helper="All branch revenue captured today" icon={<TrendingUp className="h-5 w-5" />} tone="navy" trend="Live" />
@@ -499,6 +525,31 @@ function AdminControlCard({
       <p className="mt-2 min-h-[48px] text-sm leading-6 text-slate-600">{detail}</p>
       <Link href={href} className="focus-ring mt-4 inline-flex rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">{cta}</Link>
     </article>
+  );
+}
+
+async function getTenantSetupCounts(tenantId: string) {
+  const [branches, staffMembers, patients, stockItems, orders, operatingUnits, unitsWithWhatsapp] = await Promise.all([
+    prisma.branch.count({ where: { tenantId } }),
+    prisma.staffMember.count({ where: { tenantId } }),
+    prisma.patient.count({ where: { tenantId } }),
+    prisma.stockItem.count({ where: { tenantId } }),
+    prisma.order.count({ where: { tenantId } }),
+    prisma.operatingUnit.count({ where: { tenantId } }),
+    prisma.operatingUnit.count({ where: { tenantId, whatsappNumber: { not: null } } })
+  ]);
+  return { branches, staffMembers, patients, stockItems, orders, operatingUnits, unitsWithWhatsapp };
+}
+
+function SetupCard({ title, status, detail, href, icon }: { title: string; status: string; detail: string; href: string; icon: ReactNode }) {
+  const complete = ["Complete", "Ready", "Started"].includes(status);
+  return (
+    <Link href={href} className="focus-ring rounded-lg border border-clinical-100 bg-white p-4 hover:bg-slate-50">
+      <div className={complete ? "inline-flex rounded-lg bg-emerald-50 p-2 text-emerald-700 ring-1 ring-emerald-100" : "inline-flex rounded-lg bg-amber-50 p-2 text-amber-700 ring-1 ring-amber-100"}>{icon}</div>
+      <h3 className="mt-3 text-sm font-semibold leading-5 text-navy-950">{title}</h3>
+      <p className="mt-2 text-xs font-semibold uppercase tracking-[0.08em] text-clinical-800">{status}</p>
+      <p className="mt-1 text-xs text-slate-500">{detail}</p>
+    </Link>
   );
 }
 

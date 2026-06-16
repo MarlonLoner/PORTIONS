@@ -2,6 +2,7 @@ import { KeyRound, Plus, ShieldCheck, UsersRound } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { UserRole, UserStatus } from "@prisma/client";
+import { TenantEmptyState } from "@/components/tenant-empty-state";
 import { requirePermission } from "@/lib/auth";
 import { enumLabel, formatDate } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
@@ -40,7 +41,11 @@ export default async function UsersAdminPage() {
           </div>
           <Link href="/admin/users/new" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-navy-950">
             <Plus className="h-4 w-4" aria-hidden="true" />
-            Create user
+            Create staff login
+          </Link>
+          <Link href="/admin/staff/new" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2.5 text-sm font-semibold text-white ring-1 ring-white/15">
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Add staff record
           </Link>
         </div>
       </section>
@@ -60,8 +65,9 @@ export default async function UsersAdminPage() {
           </p>
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {[
-              ["Create General Manager", "/admin/users/new"],
-              ["Create Branch Manager", "/admin/users/new"],
+              ["Add staff record", "/admin/staff/new"],
+              ["Create General Manager login", "/admin/users/new"],
+              ["Create Branch Manager login", "/admin/users/new"],
               ["Create Online Orders Agent", "/admin/users/new"],
               ["Create Finance Admin", "/admin/users/new"],
               ["Configure operating units", "/admin/operating-units"],
@@ -77,7 +83,17 @@ export default async function UsersAdminPage() {
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
         <div className="grid gap-4">
-          {users.map((user) => (
+          {users.length === 0 ? (
+            <TenantEmptyState
+              title="No staff logins have been created yet."
+              description="Create staff records, then create secure logins and assign operating-unit access for the pharmacy team."
+              primaryActionLabel="Add staff record"
+              primaryActionHref="/admin/staff/new"
+              secondaryActionLabel="Create staff login"
+              secondaryActionHref="/admin/users/new"
+              icon={UsersRound}
+            />
+          ) : users.map((user) => (
             <article key={user.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>

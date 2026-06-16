@@ -6,12 +6,14 @@ import {
   LineChart,
   PackageSearch,
   Pill,
+  Plus,
   ShoppingBag,
   TrendingUp
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { BranchPerformanceCard } from "@/components/branch-performance-card";
 import { StatCard } from "@/components/stat-card";
+import { TenantEmptyState } from "@/components/tenant-empty-state";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { getBranchOverview } from "@/lib/data";
 
@@ -62,6 +64,12 @@ export default async function BranchesPage() {
             <p className="mt-4 max-w-3xl text-base leading-7 text-slate-200">
               Monitor branch revenue, chronic follow-up discipline, order flow, stock risk, and service performance across the pharmacy network.
             </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link href="/branches/new" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-navy-950 transition hover:bg-clinical-50">
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Create branch
+              </Link>
+            </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
             <HeroSignal label="Best branch" value={bestBranch?.name ?? "No data"} helper={bestBranch ? formatCurrency(bestBranch.revenueToday) : "No revenue today"} />
@@ -99,9 +107,15 @@ export default async function BranchesPage() {
           {branches.length > 0 ? (
             branches.map((branch) => <BranchPerformanceCard key={branch.id} branch={branch} />)
           ) : (
-            <div className="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-soft">
-              No branches have been configured yet.
-            </div>
+            <TenantEmptyState
+              title="No branches have been configured yet."
+              description="Create your first branch to begin tracking stock, patients, orders and branch performance."
+              primaryActionLabel="Create first branch"
+              primaryActionHref="/branches/new"
+              secondaryActionLabel="Review operating units"
+              secondaryActionHref="/admin/operating-units"
+              icon={Building2}
+            />
           )}
         </div>
       </section>

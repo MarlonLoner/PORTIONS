@@ -8,6 +8,7 @@ import {
   Filter,
   PackageSearch,
   Pill,
+  Plus,
   ShieldAlert,
   TrendingUp,
   WalletCards
@@ -16,6 +17,7 @@ import type { ReactNode } from "react";
 import { DataTable } from "@/components/data-table";
 import { StatCard } from "@/components/stat-card";
 import { StockStatusBadge } from "@/components/stock-status-badge";
+import { TenantEmptyState } from "@/components/tenant-empty-state";
 import { enumLabel, formatCurrency, formatDate } from "@/lib/format";
 import { getStockData, stockStatusOptions } from "@/lib/data";
 import { calculateEstimatedStockValue, getStockRiskLevel, getStockSuggestedAction } from "@/lib/stock";
@@ -81,6 +83,16 @@ export default async function StockPage({ searchParams }: { searchParams: Search
               Track low stock, expiry pressure, dead stock, overstock, branch transfers, and chronic demand risk before they affect revenue.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
+              <Link href="/stock/new" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-navy-950 transition hover:bg-clinical-50">
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Add stock item
+              </Link>
+              <Link href="/imports/upload" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2.5 text-sm font-semibold text-white ring-1 ring-white/15 transition hover:bg-white/15">
+                Import stock
+              </Link>
+              <Link href="/imports" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2.5 text-sm font-semibold text-white ring-1 ring-white/15 transition hover:bg-white/15">
+                Download stock template
+              </Link>
               <Link href="/action-center" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-navy-950 transition hover:bg-clinical-50">
                 Create Stock Intervention Action
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -180,10 +192,21 @@ export default async function StockPage({ searchParams }: { searchParams: Search
           <p className="section-title">Inventory command table</p>
           <h2 className="mt-2 text-xl font-semibold tracking-tight text-navy-950">Branch-Aware Stock Register</h2>
         </div>
-        <DataTable
-          rows={stockItems}
-          emptyMessage="No stock items match these filters."
-          columns={[
+        {stockItems.length === 0 ? (
+          <TenantEmptyState
+            title="No stock records yet."
+            description="Add a stock item manually or import a stock sheet to unlock Stock Intelligence."
+            primaryActionLabel="Add stock item"
+            primaryActionHref="/stock/new"
+            secondaryActionLabel="Import stock"
+            secondaryActionHref="/imports/upload"
+            icon={PackageSearch}
+          />
+        ) : (
+          <DataTable
+            rows={stockItems}
+            emptyMessage="No stock items match these filters."
+            columns={[
             { header: "Product", cell: (item) => <ProductCell item={item} /> },
             { header: "Category", cell: (item) => item.category },
             { header: "Branch", cell: (item) => item.branch.name },
@@ -193,8 +216,9 @@ export default async function StockPage({ searchParams }: { searchParams: Search
             { header: "Value", cell: (item) => formatCurrency(item.estimatedStockValue ?? calculateEstimatedStockValue(item)) },
             { header: "Risk", cell: (item) => <RiskBadge label={item.riskLevel ?? getStockRiskLevel(item)} /> },
             { header: "Suggested action", className: "min-w-[320px] px-4 py-4 text-slate-700", cell: (item) => <span className="text-sm leading-6">{getStockSuggestedAction(item)}</span> }
-          ]}
-        />
+            ]}
+          />
+        )}
       </section>
     </div>
   );

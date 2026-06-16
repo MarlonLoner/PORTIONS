@@ -6,6 +6,7 @@ import {
   Crown,
   DollarSign,
   Filter,
+  Plus,
   ShieldAlert,
   UsersRound
 } from "lucide-react";
@@ -15,6 +16,7 @@ import { PatientCard } from "@/components/patient-card";
 import { RiskBadge } from "@/components/risk-badge";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
+import { TenantEmptyState } from "@/components/tenant-empty-state";
 import { chronicActionCopy, estimateMonthlyPatientValue, isHighRisk, isPatientDueToday, isPatientOverdue } from "@/lib/chronic";
 import { daysFromNow, enumLabel, formatCurrency, formatDate } from "@/lib/format";
 import { getPatientList, packageTypeOptions, patientStatusOptions, riskScoreOptions } from "@/lib/data";
@@ -81,6 +83,13 @@ export default async function PatientsPage({ searchParams }: { searchParams: Sea
               Track recurring patients, refill risk, package value, and follow-up discipline across every branch.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
+              <Link href="/patients/new" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-navy-950 transition hover:bg-clinical-50">
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Add patient
+              </Link>
+              <Link href="/imports/upload" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2.5 text-sm font-semibold text-white ring-1 ring-white/15 transition hover:bg-white/15">
+                Import patients
+              </Link>
               <Link href="/action-center" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-navy-950 transition hover:bg-clinical-50">
                 Create Chronic Patient Action
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -147,7 +156,17 @@ export default async function PatientsPage({ searchParams }: { searchParams: Sea
         {enrichedPatients.map((patient) => (
           <PatientCard key={patient.id} patient={patient} />
         ))}
-        {enrichedPatients.length === 0 ? <p className="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-soft">No patients match these filters.</p> : null}
+        {enrichedPatients.length === 0 ? (
+          <TenantEmptyState
+            title="No patient records yet."
+            description="Add your first patient or import a chronic patient list."
+            primaryActionLabel="Add patient"
+            primaryActionHref="/patients/new"
+            secondaryActionLabel="Import patients"
+            secondaryActionHref="/imports/upload"
+            icon={UsersRound}
+          />
+        ) : null}
       </div>
 
       <section className="hidden md:block">
@@ -158,10 +177,21 @@ export default async function PatientsPage({ searchParams }: { searchParams: Sea
           </div>
           <p className="text-sm text-slate-500">{enrichedPatients.length} patients shown</p>
         </div>
-        <DataTable
-          rows={enrichedPatients}
-          emptyMessage="No chronic patients match these filters."
-          columns={[
+        {enrichedPatients.length === 0 ? (
+          <TenantEmptyState
+            title="No patient records yet."
+            description="Add your first patient or import a chronic patient list."
+            primaryActionLabel="Add patient"
+            primaryActionHref="/patients/new"
+            secondaryActionLabel="Import patients"
+            secondaryActionHref="/imports/upload"
+            icon={UsersRound}
+          />
+        ) : (
+          <DataTable
+            rows={enrichedPatients}
+            emptyMessage="No chronic patients match these filters."
+            columns={[
             {
               header: "Patient",
               cell: (patient) => (
@@ -184,8 +214,9 @@ export default async function PatientsPage({ searchParams }: { searchParams: Sea
               className: "min-w-[280px] px-4 py-4 text-slate-700",
               cell: (patient) => <span className="text-sm leading-6">{chronicActionCopy(patient)}</span>
             }
-          ]}
-        />
+            ]}
+          />
+        )}
       </section>
     </div>
   );

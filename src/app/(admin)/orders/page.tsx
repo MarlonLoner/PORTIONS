@@ -10,6 +10,7 @@ import {
   Globe2,
   Pill,
   Plane,
+  Plus,
   ShieldCheck,
   ShoppingBag,
   Truck
@@ -19,6 +20,7 @@ import { DataTable } from "@/components/data-table";
 import { OrderPipelineCard } from "@/components/order-pipeline-card";
 import { OrderStatusBadge } from "@/components/order-status-badge";
 import { StatCard } from "@/components/stat-card";
+import { TenantEmptyState } from "@/components/tenant-empty-state";
 import { enumLabel, formatCurrency, formatDateTime } from "@/lib/format";
 import { getOrders, orderSourceOptions, orderStatusOptions, orderTypeOptions } from "@/lib/data";
 import { isDelayedOrder, isOnlineOrder, isOrderToday, orderRevenueUrgency, orderSuggestedAction } from "@/lib/orders";
@@ -103,6 +105,13 @@ export default async function OrdersPage({ searchParams }: { searchParams: Searc
               Track prescriptions, refills, online orders, payments, dispatch, and branch fulfillment from one command view.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
+              <Link href="/orders/new" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-navy-950 transition hover:bg-clinical-50">
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Create order
+              </Link>
+              <Link href="/imports/upload" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2.5 text-sm font-semibold text-white ring-1 ring-white/15 transition hover:bg-white/15">
+                Import orders
+              </Link>
               <Link href="/action-center" className="focus-ring inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-navy-950 transition hover:bg-clinical-50">
                 Create Order Recovery Action
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -155,7 +164,18 @@ export default async function OrdersPage({ searchParams }: { searchParams: Searc
           <p className="section-title">Pipeline lanes</p>
           <h2 className="mt-2 text-xl font-semibold tracking-tight text-navy-950">Order Revenue Flow</h2>
         </div>
-        <div className="grid gap-5 xl:grid-cols-3">
+        {allOrders.length === 0 ? (
+          <TenantEmptyState
+            title="No orders yet."
+            description="Create the first order or begin from an imported customer request."
+            primaryActionLabel="Create order"
+            primaryActionHref="/orders/new"
+            secondaryActionLabel="Import orders"
+            secondaryActionHref="/imports/upload"
+            icon={ShoppingBag}
+          />
+        ) : (
+          <div className="grid gap-5 xl:grid-cols-3">
           {orderStatusOptions.map((status) => {
             const group = orders.filter((order) => order.status === status);
             const groupValue = group.reduce((sum, order) => sum + Number(order.amount), 0);
@@ -176,7 +196,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Searc
               </section>
             );
           })}
-        </div>
+          </div>
+        )}
       </section>
 
       <section className="hidden xl:block">

@@ -13,6 +13,7 @@ import {
   SlidersHorizontal,
   UsersRound
 } from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { getSettingsData } from "@/lib/data";
 import {
@@ -118,7 +119,9 @@ export default async function OnboardingPage() {
                 <p className="mt-2 text-sm leading-6 text-slate-700">{step.required.join(", ")}</p>
               </div>
               <p className="mt-3 text-sm leading-6 text-slate-600">{step.example}</p>
-              <p className="mt-3 text-sm font-semibold leading-6 text-clinical-800">{step.action}</p>
+              <Link href={stepHref(step.title)} className="focus-ring mt-3 inline-flex rounded-lg bg-white px-3 py-2 text-sm font-semibold leading-6 text-clinical-800 ring-1 ring-clinical-100">
+                {step.action}
+              </Link>
             </article>
           ))}
         </div>
@@ -310,4 +313,18 @@ function StatusList({ items }: { items: string[][] }) {
       ))}
     </div>
   );
+}
+
+function stepHref(title: string) {
+  const map: Record<string, string> = {
+    "Pharmacy Profile": "/settings",
+    "Branch Setup": "/branches/new",
+    "Staff Roles": "/admin/staff/new",
+    "Chronic Patient Import": "/patients/new",
+    "Stock Import": "/stock/new",
+    "Order Sources": "/orders/new",
+    "Notification Channels": "/admin/operating-units",
+    "Success Metrics": "/reports"
+  };
+  return map[title] ?? "/onboarding";
 }
