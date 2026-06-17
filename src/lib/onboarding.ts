@@ -292,6 +292,24 @@ const pilotMinimumKeys: OnboardingStepKey[] = [
 ];
 
 type OnboardingSummary = Awaited<ReturnType<typeof evaluateTenantOnboarding>>;
+type SubmitTenantForReviewResult = {
+  outcome: "submitted" | "already_submitted" | "already_active";
+  summary: OnboardingSummary;
+};
+
+type ReviewTenantOnboardingResult = {
+  outcome:
+    | "under_review"
+    | "already_under_review"
+    | "changes_requested"
+    | "already_changes_requested"
+    | "blocked"
+    | "already_blocked"
+    | "already_approved"
+    | "activated"
+    | "already_active";
+  summary: OnboardingSummary;
+};
 
 export async function getOrCreateTenantOnboarding(tenantId: string, tx?: Prisma.TransactionClient) {
   const client = tx ?? prisma;
@@ -815,7 +833,7 @@ export function evaluateOnboardingStep(
   };
 }
 
-export async function submitTenantForReview() {
+export async function submitTenantForReview(): Promise<SubmitTenantForReviewResult> {
   const user = await getCurrentAccessUser();
   if (!user?.tenantId || !hasPermission(user, "managePilot")) throw new Error("You do not have permission to submit onboarding for review.");
 
@@ -824,10 +842,10 @@ export async function submitTenantForReview() {
     throw new Error(summary.submissionPolicy.blockingReasons[0] ?? "Complete the remaining onboarding requirements before submitting for review.");
   }
   if (reviewPendingStatuses.has(summary.status)) {
-    throw new Error("This tenant is already waiting for platform review.");
+    return { outcome: "already_submitted", summary };
   }
-  if (summary.status === TenantOnboardingStatus.ACTIVE) {
-    throw new Error("This tenant has already been activated.");
+  if (summary.status === TenantOnboardingStatus.APPROVED || summary.status === TenantOnboardingStatus.ACTIVE) {
+    return { outcome: "already_active", summary };
   }
 
   await prisma.$transaction(async (tx) => {
@@ -859,16 +877,27 @@ export async function submitTenantForReview() {
     });
   });
 
-  return evaluateTenantOnboarding(user.tenantId);
+  return {
+    outcome: "submitted",
+    summary: await evaluateTenantOnboarding(user.tenantId)
+  };
 }
 
 export async function reviewTenantOnboarding(input: {
   tenantId: string;
   decision: "UNDER_REVIEW" | "REQUEST_CHANGES" | "APPROVE" | "BLOCK";
   reviewNotes?: string;
-}) {
+}): Promise<ReviewTenantOnboardingResult> {
   const reviewer = await requirePlatformUser([PlatformRole.PLATFORM_OWNER, PlatformRole.PLATFORM_ADMIN]);
   const notes = cleanText(input.reviewNotes);
+  const summary = await evaluateTenantOnboarding(input.tenantId);
+
+  if (summary.status === TenantOnboardingStatus.ACTIVE) {
+    return { outcome: "already_active", summary };
+  }
+  if (summary.status === TenantOnboardingStatus.APPROVED) {
+    return { outcome: "already_approved", summary };
+  }
 
   if (input.decision === "APPROVE") {
     return activateTenantFromOnboarding(input.tenantId, reviewer, notes);
@@ -877,8 +906,15 @@ export async function reviewTenantOnboarding(input: {
   if ((input.decision === "REQUEST_CHANGES" || input.decision === "BLOCK") && !notes) {
     throw new Error("Review notes are required for this decision.");
   }
-
-  const summary = await evaluateTenantOnboarding(input.tenantId);
+  if (input.decision === "UNDER_REVIEW" && summary.status === TenantOnboardingStatus.UNDER_REVIEW && (notes || "") === (summary.onboarding.reviewNotes || "")) {
+    return { outcome: "already_under_review", summary };
+  }
+  if (input.decision === "REQUEST_CHANGES" && summary.status === TenantOnboardingStatus.CHANGES_REQUESTED && notes === (summary.onboarding.reviewNotes || "")) {
+    return { outcome: "already_changes_requested", summary };
+  }
+  if (input.decision === "BLOCK" && summary.status === TenantOnboardingStatus.BLOCKED && notes === (summary.onboarding.reviewNotes || "")) {
+    return { outcome: "already_blocked", summary };
+  }
 
   await prisma.$transaction(async (tx) => {
     if (input.decision === "UNDER_REVIEW") {
@@ -942,18 +978,39 @@ export async function reviewTenantOnboarding(input: {
     });
   });
 
-  return evaluateTenantOnboarding(input.tenantId);
+  return {
+    outcome:
+      input.decision === "UNDER_REVIEW"
+        ? "under_review"
+        : input.decision === "REQUEST_CHANGES"
+          ? "changes_requested"
+          : "blocked",
+    summary: await evaluateTenantOnboarding(input.tenantId)
+  };
 }
 
-export async function activateTenantFromOnboarding(tenantId: string, reviewer?: CurrentPlatformUser | null, reviewNotes = "") {
+export async function activateTenantFromOnboarding(
+  tenantId: string,
+  reviewer?: CurrentPlatformUser | null,
+  reviewNotes = ""
+): Promise<ReviewTenantOnboardingResult> {
   const platformReviewer = reviewer ?? await requirePlatformUser([PlatformRole.PLATFORM_OWNER, PlatformRole.PLATFORM_ADMIN]);
   const summary = await evaluateTenantOnboarding(tenantId);
 
   if (!summary.submissionPolicy.canApprove) {
     throw new Error(summary.submissionPolicy.blockingReasons[0] ?? "This tenant is not ready for activation.");
   }
-  if (summary.status !== TenantOnboardingStatus.READY_FOR_REVIEW && summary.status !== TenantOnboardingStatus.UNDER_REVIEW && summary.status !== TenantOnboardingStatus.CHANGES_REQUESTED) {
-    if (summary.status === TenantOnboardingStatus.ACTIVE) return summary;
+  if (summary.status === TenantOnboardingStatus.ACTIVE) {
+    return { outcome: "already_active", summary };
+  }
+  if (summary.status === TenantOnboardingStatus.APPROVED) {
+    return { outcome: "already_approved", summary };
+  }
+  if (
+    summary.status !== TenantOnboardingStatus.READY_FOR_REVIEW &&
+    summary.status !== TenantOnboardingStatus.UNDER_REVIEW &&
+    summary.status !== TenantOnboardingStatus.CHANGES_REQUESTED
+  ) {
     throw new Error("Submit this tenant for go-live review before activation.");
   }
 
@@ -1018,7 +1075,10 @@ export async function activateTenantFromOnboarding(tenantId: string, reviewer?: 
     });
   });
 
-  return evaluateTenantOnboarding(tenantId);
+  return {
+    outcome: "activated",
+    summary: await evaluateTenantOnboarding(tenantId)
+  };
 }
 
 export async function recordOperationalOutput(output: OperationalOutputKey) {

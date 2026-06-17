@@ -14,9 +14,11 @@ import {
 import { TenantOnboardingStatus, TenantOnboardingStepStatus } from "@prisma/client";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { TenantOnboardingSubmitForm } from "@/components/tenant-onboarding-submit-form";
 import { formatDateTime } from "@/lib/format";
+import { getOnboardingPageFeedback } from "@/lib/onboarding-feedback";
 import { getTenantOnboardingSummary } from "@/lib/onboarding";
-import { submitGoLiveReviewAction } from "./actions";
+import { submitGoLiveReviewAction, type SubmitGoLiveReviewState } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -43,9 +45,12 @@ const stepStatusClasses: Record<TenantOnboardingStepStatus, string> = {
 const nonSubmittableStatuses = new Set<TenantOnboardingStatus>([
   TenantOnboardingStatus.READY_FOR_REVIEW,
   TenantOnboardingStatus.UNDER_REVIEW,
+  TenantOnboardingStatus.APPROVED,
   TenantOnboardingStatus.ACTIVE,
   TenantOnboardingStatus.BLOCKED
 ]);
+
+type OnboardingSummary = Awaited<ReturnType<typeof getTenantOnboardingSummary>>;
 
 export default async function OnboardingPage({
   searchParams
@@ -57,12 +62,18 @@ export default async function OnboardingPage({
     getTenantOnboardingSummary(),
     searchParams ?? Promise.resolve(emptySearchParams)
   ]);
+  const feedback = getOnboardingPageFeedback(params);
+  const goLiveState = getGoLiveState(summary);
 
   const openSteps = summary.steps.filter((step) => step.key !== "GO_LIVE_REVIEW" && step.status !== TenantOnboardingStepStatus.COMPLETE);
   const completedSteps = summary.steps.filter((step) => step.key !== "GO_LIVE_REVIEW" && step.status === TenantOnboardingStepStatus.COMPLETE);
   const showSubmit =
     summary.submissionPolicy.canSubmit &&
     !nonSubmittableStatuses.has(summary.status);
+  const submitAction = submitGoLiveReviewAction as (
+    state: SubmitGoLiveReviewState,
+    formData: FormData
+  ) => Promise<SubmitGoLiveReviewState>;
 
   return (
     <div className="space-y-6">
@@ -135,8 +146,7 @@ export default async function OnboardingPage({
         </div>
       </section>
 
-      {params.success ? <Banner tone="success">{params.success}</Banner> : null}
-      {params.error ? <Banner tone="error">{params.error}</Banner> : null}
+      {feedback ? <Banner tone={feedback.tone}>{feedback.message}</Banner> : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Tenant" value={summary.tenant.name} helper={`${summary.tenant.country} / ${summary.tenant.currency} / ${summary.tenant.timezone}`} />
@@ -284,16 +294,10 @@ export default async function OnboardingPage({
 
       <section id="go-live-review" className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
         <Panel title="Go-live review" eyebrow="Final gate" icon={<CheckCircle2 className="h-5 w-5" />}>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div className={`rounded-lg border p-4 ${goLiveState.panelClass}`}>
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Submission state</p>
-            <p className="mt-2 text-lg font-semibold text-navy-950">{summary.status.replace(/_/g, " ")}</p>
-            <p className="mt-3 text-sm leading-6 text-slate-700">
-              {summary.status === TenantOnboardingStatus.ACTIVE
-                ? "This tenant is active. Onboarding history stays here so the launch trail remains visible."
-                : summary.submissionPolicy.canSubmit
-                  ? "The current minimum is complete. Submit now for platform review when the owner is ready."
-                  : "The tenant cannot be submitted yet. Clear the remaining blockers first."}
-            </p>
+            <p className="mt-2 text-lg font-semibold text-navy-950">{goLiveState.title}</p>
+            <p className="mt-3 text-sm leading-6 text-slate-700">{goLiveState.description}</p>
           </div>
           <div className="mt-4 space-y-3">
             <ListRow tone={summary.submissionPolicy.canSubmit ? "success" : "risk"}>
@@ -308,6 +312,18 @@ export default async function OnboardingPage({
             <ListRow tone={summary.counts.importedBatches > 0 ? "success" : "normal"}>
               Imported data batches: {summary.counts.importedBatches}
             </ListRow>
+            {summary.onboarding.submittedAt ? (
+              <ListRow tone="normal">Submitted: {formatDateTime(summary.onboarding.submittedAt)}</ListRow>
+            ) : null}
+            {(summary.status === TenantOnboardingStatus.READY_FOR_REVIEW || summary.status === TenantOnboardingStatus.UNDER_REVIEW) ? (
+              <ListRow tone="normal">Platform review pending</ListRow>
+            ) : null}
+            {summary.onboarding.reviewedAt ? (
+              <ListRow tone="normal">Latest platform review touch: {formatDateTime(summary.onboarding.reviewedAt)}</ListRow>
+            ) : null}
+            {summary.onboarding.activatedAt ? (
+              <ListRow tone="success">Activated: {formatDateTime(summary.onboarding.activatedAt)}</ListRow>
+            ) : null}
           </div>
 
           {summary.onboarding.reviewNotes ? (
@@ -318,12 +334,7 @@ export default async function OnboardingPage({
           ) : null}
 
           {showSubmit ? (
-            <form action={submitGoLiveReviewAction} className="mt-5">
-              <button className="focus-ring inline-flex items-center gap-2 rounded-lg bg-navy-950 px-4 py-2.5 text-sm font-semibold text-white">
-                Submit for go-live review
-                <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </form>
+            <TenantOnboardingSubmitForm action={submitAction} />
           ) : null}
         </Panel>
 
@@ -366,6 +377,70 @@ export default async function OnboardingPage({
       </section>
     </div>
   );
+}
+
+function getGoLiveState(summary: OnboardingSummary) {
+  if (summary.status === TenantOnboardingStatus.ACTIVE) {
+    return {
+      title: "Pharmacy workspace activated",
+      description: "Go-live has been approved and activation is complete. This page now serves as the launch history for future audits, rollout reviews, and branch expansion work.",
+      panelClass: "border-emerald-200 bg-emerald-50"
+    };
+  }
+
+  if (summary.status === TenantOnboardingStatus.APPROVED) {
+    return {
+      title: "Go-live approved",
+      description: "Platform approval has been recorded. PORTIONS is finalizing the activation trail for this pharmacy workspace.",
+      panelClass: "border-emerald-200 bg-emerald-50"
+    };
+  }
+
+  if (summary.status === TenantOnboardingStatus.READY_FOR_REVIEW) {
+    return {
+      title: "Submitted for go-live review",
+      description: "The tenant met the current launch minimum and has already been submitted. Platform review is pending, so there is nothing else to resubmit right now.",
+      panelClass: "border-amber-200 bg-amber-50"
+    };
+  }
+
+  if (summary.status === TenantOnboardingStatus.UNDER_REVIEW) {
+    return {
+      title: "Platform review in progress",
+      description: "A platform reviewer is actively working this launch. Keep the workspace current, but do not submit again unless new changes are requested.",
+      panelClass: "border-navy-200 bg-slate-50"
+    };
+  }
+
+  if (summary.status === TenantOnboardingStatus.CHANGES_REQUESTED) {
+    return {
+      title: "Changes requested before go-live",
+      description: "Platform review returned this tenant for updates. Resolve the review notes below, confirm the launch evidence again, then resubmit for review.",
+      panelClass: "border-amber-200 bg-amber-50"
+    };
+  }
+
+  if (summary.status === TenantOnboardingStatus.BLOCKED) {
+    return {
+      title: "Go-live blocked",
+      description: "Platform review has blocked activation for now. Review the notes carefully and clear the issue before expecting approval.",
+      panelClass: "border-rose-200 bg-rose-50"
+    };
+  }
+
+  if (summary.submissionPolicy.canSubmit) {
+    return {
+      title: "Ready for go-live submission",
+      description: "The current launch minimum is complete. Submit now when the owner is ready for platform review.",
+      panelClass: "border-slate-200 bg-slate-50"
+    };
+  }
+
+  return {
+    title: "Not ready for go-live submission",
+    description: "This tenant still has open blockers. Clear the remaining onboarding requirements before submitting for platform review.",
+    panelClass: "border-slate-200 bg-slate-50"
+  };
 }
 
 function Banner({ children, tone }: { children: ReactNode; tone: "success" | "error" }) {

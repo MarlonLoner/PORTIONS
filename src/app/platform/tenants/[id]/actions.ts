@@ -28,6 +28,44 @@ export type OwnerInvitationState =
       error: string;
     };
 
+export type PlatformOnboardingReviewState = {
+  error: string;
+};
+
+function getReviewRedirectCode(
+  outcome:
+    | "under_review"
+    | "already_under_review"
+    | "changes_requested"
+    | "already_changes_requested"
+    | "blocked"
+    | "already_blocked"
+    | "already_approved"
+    | "activated"
+    | "already_active"
+) {
+  switch (outcome) {
+    case "already_under_review":
+      return "review-already-started";
+    case "changes_requested":
+      return "changes-requested";
+    case "already_changes_requested":
+      return "changes-already-requested";
+    case "blocked":
+      return "blocked";
+    case "already_blocked":
+      return "tenant-already-blocked";
+    case "already_approved":
+      return "go-live-already-approved";
+    case "already_active":
+      return "tenant-already-active";
+    case "activated":
+      return "go-live-approved";
+    default:
+      return "review-started";
+  }
+}
+
 function clean(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -98,26 +136,41 @@ export async function revokeOwnerInvitationAction(tenantId: string, formData: Fo
 }
 
 export async function reviewTenantOnboardingAction(tenantId: string, formData: FormData) {
+  return reviewTenantOnboardingStatefulAction(tenantId, { error: "" }, formData);
+}
+
+export async function reviewTenantOnboardingStatefulAction(
+  tenantId: string,
+  _state: PlatformOnboardingReviewState,
+  formData: FormData
+): Promise<PlatformOnboardingReviewState> {
   await requirePlatformUser([PlatformRole.PLATFORM_OWNER, PlatformRole.PLATFORM_ADMIN]);
   const decision = clean(formData.get("decision"));
   const reviewNotes = clean(formData.get("reviewNotes"));
+  let destination = `/platform/tenants/${tenantId}`;
 
   if (!["UNDER_REVIEW", "REQUEST_CHANGES", "APPROVE", "BLOCK"].includes(decision)) {
-    redirect(`/platform/tenants/${tenantId}?error=${encodeURIComponent("Select a valid onboarding review decision.")}`);
+    return { error: "Select a valid onboarding review decision." };
   }
 
   try {
-    await reviewTenantOnboarding({
+    const result = await reviewTenantOnboarding({
       tenantId,
       decision: decision as "UNDER_REVIEW" | "REQUEST_CHANGES" | "APPROVE" | "BLOCK",
       reviewNotes
     });
+    revalidatePath("/dashboard");
+    revalidatePath("/onboarding");
+    revalidatePath("/platform/tenants");
+    revalidatePath(`/platform/tenants/${tenantId}`);
+    destination = `${destination}?success=${encodeURIComponent(getReviewRedirectCode(result.outcome))}`;
   } catch (error) {
-    redirect(`/platform/tenants/${tenantId}?error=${encodeURIComponent(error instanceof Error ? error.message : "Onboarding review could not be updated.")}`);
+    return {
+      error: error instanceof Error ? error.message : "Onboarding review could not be updated."
+    };
   }
 
-  revalidatePath(`/platform/tenants/${tenantId}`);
-  redirect(`/platform/tenants/${tenantId}?success=${encodeURIComponent("Onboarding review updated.")}`);
+  redirect(destination);
 }
 
 async function getRequestOrigin() {

@@ -1,11 +1,18 @@
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
+import { PlatformOnboardingReviewForm } from "@/components/platform-onboarding-review-form";
 import { requirePlatformUser } from "@/lib/platform-auth";
 import { getTenantControlPlaneDetail } from "@/lib/platform";
+import { getPlatformTenantFeedback } from "@/lib/onboarding-feedback";
 import { getPlatformTenantOnboardingSummary } from "@/lib/onboarding";
 import { TenantOwnerInvitationForm } from "@/components/tenant-owner-invitation-form";
 import { isInvitationEmailConfigured } from "@/lib/invitation-delivery";
-import { createOwnerInvitationAction, reviewTenantOnboardingAction, revokeOwnerInvitationAction } from "./actions";
+import {
+  createOwnerInvitationAction,
+  reviewTenantOnboardingStatefulAction,
+  revokeOwnerInvitationAction,
+  type PlatformOnboardingReviewState
+} from "./actions";
 
 export default async function PlatformTenantDetailPage({
   params,
@@ -23,6 +30,7 @@ export default async function PlatformTenantDetailPage({
     getPlatformTenantOnboardingSummary(id),
     searchParams ?? Promise.resolve(emptySearchParams)
   ]);
+  const flash = getPlatformTenantFeedback(feedback);
   const activeOwner = tenant.appUsers.find((user) => user.role === "OWNER" && user.status === "ACTIVE");
   const latestInvitation = tenant.userInvitations[0];
   const pendingInvitation = tenant.userInvitations.find((invitation) => invitation.status === "PENDING" && invitation.expiresAt > new Date());
@@ -47,13 +55,15 @@ export default async function PlatformTenantDetailPage({
   const provisioningStatus = getProvisioningStatus({ activeOwner: Boolean(activeOwner), pendingInvitation: Boolean(pendingInvitation), complete: provisioningComplete === provisioningSteps.length });
   const createOwnerInvitation = createOwnerInvitationAction.bind(null, tenant.id);
   const revokeOwnerInvitation = revokeOwnerInvitationAction.bind(null, tenant.id);
-  const reviewOnboarding = reviewTenantOnboardingAction.bind(null, tenant.id);
+  const reviewOnboarding = reviewTenantOnboardingStatefulAction.bind(null, tenant.id) as (
+    state: PlatformOnboardingReviewState,
+    formData: FormData
+  ) => Promise<PlatformOnboardingReviewState>;
   const emailConfigured = isInvitationEmailConfigured();
 
   return (
     <>
-      {feedback.success ? <Flash tone="success">{feedback.success}</Flash> : null}
-      {feedback.error ? <Flash tone="error">{feedback.error}</Flash> : null}
+      {flash ? <Flash tone={flash.tone}>{flash.message}</Flash> : null}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
@@ -198,32 +208,7 @@ export default async function PlatformTenantDetailPage({
               </div>
             )}
           </div>
-          <form action={reviewOnboarding} className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5">
-            <label className="grid gap-2">
-              <span className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Review notes</span>
-              <textarea
-                name="reviewNotes"
-                defaultValue={onboarding.onboarding.reviewNotes ?? ""}
-                rows={5}
-                className="focus-ring w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-navy-950"
-                placeholder="Add platform review notes, missing evidence, or go-live conditions."
-              />
-            </label>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <button name="decision" value="UNDER_REVIEW" className="focus-ring rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700">
-                Start review
-              </button>
-              <button name="decision" value="REQUEST_CHANGES" className="focus-ring rounded-lg bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800">
-                Request changes
-              </button>
-              <button name="decision" value="APPROVE" className="focus-ring rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white">
-                Approve go-live
-              </button>
-              <button name="decision" value="BLOCK" className="focus-ring rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white">
-                Mark blocked
-              </button>
-            </div>
-          </form>
+          <PlatformOnboardingReviewForm action={reviewOnboarding} defaultNotes={onboarding.onboarding.reviewNotes ?? ""} />
           {onboarding.onboarding.submittedAt ? (
             <div className="rounded-lg border border-slate-100 p-4 text-sm text-slate-600">
               Submitted: {onboarding.onboarding.submittedAt.toLocaleString()}
