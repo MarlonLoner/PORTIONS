@@ -37,6 +37,7 @@ import {
   getStockControlPack
 } from "@/lib/reports";
 import { getCommunicationMetrics } from "@/lib/communications";
+import { recordOperationalOutput } from "@/lib/onboarding";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,7 @@ const statusClasses = {
 };
 
 export default async function ReportsPage() {
+  await recordOperationalOutput("REPORTS");
   const reportData = await getReportsData();
   const communicationMetrics = await getCommunicationMetrics();
   const overview = getReportsOverview(reportData);

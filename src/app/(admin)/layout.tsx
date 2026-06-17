@@ -3,6 +3,8 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { canViewPage, getCurrentAccessUser } from "@/lib/auth";
+import { evaluateTenantOnboarding } from "@/lib/onboarding";
+import { TenantOnboardingStatus } from "@prisma/client";
 
 const shellHrefs = [
   "/dashboard",
@@ -44,10 +46,19 @@ export default async function AdminLayout({
   }
   if (pathname && !canViewPage(user, pathname)) redirect("/access-denied");
   const visibleHrefs = shellHrefs.filter((href) => canViewPage(user, href));
+  const onboardingSummary =
+    user.tenantId && canViewPage(user, "/onboarding")
+      ? await evaluateTenantOnboarding(user.tenantId)
+      : null;
+  const navBadges =
+    onboardingSummary && onboardingSummary.status !== TenantOnboardingStatus.ACTIVE
+      ? { "/onboarding": `${onboardingSummary.readinessScore}%` }
+      : undefined;
 
   return (
     <AppShell
       visibleHrefs={visibleHrefs}
+      navBadges={navBadges}
       user={{
         name: user.name,
         role: user.role,

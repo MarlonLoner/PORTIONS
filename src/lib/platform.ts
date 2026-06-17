@@ -1,9 +1,11 @@
 import "server-only";
 
 import { ImportBatchStatus, PilotRequestStatus, TenantPlan, TenantStatus } from "@prisma/client";
+import { backfillTenantOnboardingRecords } from "@/lib/onboarding";
 import { prisma } from "@/lib/prisma";
 
 export async function getPlatformDashboardData() {
+  await backfillTenantOnboardingRecords();
   const [
     totalTenants,
     activePilots,
@@ -60,6 +62,7 @@ export async function getPlatformDashboardData() {
 }
 
 export async function getTenantDirectory() {
+  await backfillTenantOnboardingRecords();
   return prisma.tenant.findMany({
     orderBy: [{ status: "asc" }, { name: "asc" }],
     select: {

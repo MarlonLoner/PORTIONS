@@ -86,7 +86,7 @@ export default async function UsersAdminPage() {
           {users.length === 0 ? (
             <TenantEmptyState
               title="No staff logins have been created yet."
-              description="Create staff records, then create secure logins and assign operating-unit access for the pharmacy team."
+              description="Create staff records, then create secure logins and assign operating-unit access for the pharmacy team. Team-readiness and permission checks update automatically after activation."
               primaryActionLabel="Add staff record"
               primaryActionHref="/admin/staff/new"
               secondaryActionLabel="Create staff login"

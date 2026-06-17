@@ -159,7 +159,7 @@ export default async function PatientsPage({ searchParams }: { searchParams: Sea
         {enrichedPatients.length === 0 ? (
           <TenantEmptyState
             title="No patient records yet."
-            description="Add your first patient or import a chronic patient list."
+            description="Add your first patient or import a chronic patient list. PORTIONS will mark patient-data readiness automatically once valid records exist."
             primaryActionLabel="Add patient"
             primaryActionHref="/patients/new"
             secondaryActionLabel="Import patients"
@@ -180,7 +180,7 @@ export default async function PatientsPage({ searchParams }: { searchParams: Sea
         {enrichedPatients.length === 0 ? (
           <TenantEmptyState
             title="No patient records yet."
-            description="Add your first patient or import a chronic patient list."
+            description="Add your first patient or import a chronic patient list. PORTIONS will mark patient-data readiness automatically once valid records exist."
             primaryActionLabel="Add patient"
             primaryActionHref="/patients/new"
             secondaryActionLabel="Import patients"

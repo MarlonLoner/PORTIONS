@@ -2,19 +2,27 @@ import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { requirePlatformUser } from "@/lib/platform-auth";
 import { getTenantControlPlaneDetail } from "@/lib/platform";
+import { getPlatformTenantOnboardingSummary } from "@/lib/onboarding";
 import { TenantOwnerInvitationForm } from "@/components/tenant-owner-invitation-form";
 import { isInvitationEmailConfigured } from "@/lib/invitation-delivery";
-import { createOwnerInvitationAction, revokeOwnerInvitationAction } from "./actions";
+import { createOwnerInvitationAction, reviewTenantOnboardingAction, revokeOwnerInvitationAction } from "./actions";
 
 export default async function PlatformTenantDetailPage({
-  params
+  params,
+  searchParams
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ success?: string; error?: string }>;
 }) {
   await requirePlatformUser();
   const { id } = await params;
+  const emptySearchParams: { success?: string; error?: string } = {};
   const tenant = await getTenantControlPlaneDetail(id);
   if (!tenant) notFound();
+  const [onboarding, feedback] = await Promise.all([
+    getPlatformTenantOnboardingSummary(id),
+    searchParams ?? Promise.resolve(emptySearchParams)
+  ]);
   const activeOwner = tenant.appUsers.find((user) => user.role === "OWNER" && user.status === "ACTIVE");
   const latestInvitation = tenant.userInvitations[0];
   const pendingInvitation = tenant.userInvitations.find((invitation) => invitation.status === "PENDING" && invitation.expiresAt > new Date());
@@ -39,10 +47,14 @@ export default async function PlatformTenantDetailPage({
   const provisioningStatus = getProvisioningStatus({ activeOwner: Boolean(activeOwner), pendingInvitation: Boolean(pendingInvitation), complete: provisioningComplete === provisioningSteps.length });
   const createOwnerInvitation = createOwnerInvitationAction.bind(null, tenant.id);
   const revokeOwnerInvitation = revokeOwnerInvitationAction.bind(null, tenant.id);
+  const reviewOnboarding = reviewTenantOnboardingAction.bind(null, tenant.id);
   const emailConfigured = isInvitationEmailConfigured();
 
   return (
     <>
+      {feedback.success ? <Flash tone="success">{feedback.success}</Flash> : null}
+      {feedback.error ? <Flash tone="error">{feedback.error}</Flash> : null}
+
       <section className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
           <div>
@@ -125,6 +137,103 @@ export default async function PlatformTenantDetailPage({
         </Panel>
       </section>
 
+      <section className="grid gap-5 xl:grid-cols-[1fr_0.95fr]">
+        <Panel title="Onboarding & Activation">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Platform-safe activation summary</p>
+                <p className="mt-2 text-2xl font-semibold text-navy-950">{onboarding.readinessScore}% readiness</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge>{onboarding.status}</Badge>
+                <Badge>{onboarding.submissionPolicy.label}</Badge>
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <Metric label="Current step" value={onboarding.currentStep.title} />
+            <Metric label="Required complete" value={`${onboarding.completedRequiredSteps}/${onboarding.totalRequiredSteps}`} />
+            <Metric label="Branch count" value={onboarding.counts.branches} />
+            <Metric label="Active users" value={onboarding.counts.activeUsers} />
+            <Metric label="Patients" value={onboarding.counts.patients} />
+            <Metric label="Stock items" value={onboarding.counts.stockItems} />
+            <Metric label="Import batches" value={onboarding.counts.totalImportBatches} />
+            <Metric label="WhatsApp units" value={onboarding.counts.unitsWithWhatsapp} />
+            <Metric label="Permissions health" value={onboarding.permissions.healthy ? "Healthy" : "Needs review"} />
+          </div>
+          <div className="grid gap-3">
+            {onboarding.steps.map((step) => (
+              <div key={step.key} className="rounded-lg border border-slate-100 p-4">
+                <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
+                  <div>
+                    <p className="font-semibold text-navy-950">{step.title}</p>
+                    <p className="mt-1 text-sm text-slate-500">{step.why}</p>
+                  </div>
+                  <Badge>{step.status}</Badge>
+                </div>
+                {step.evidence.length > 0 ? <p className="mt-2 text-sm text-slate-600">{step.evidence[0]}</p> : null}
+                {step.blockers.length > 0 ? <p className="mt-2 text-sm font-medium text-rose-700">{step.blockers[0]}</p> : null}
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel title="Activation Review Controls">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm leading-6 text-slate-700">
+              This panel intentionally shows only non-sensitive setup evidence: readiness score, branch and user counts, import progress, WhatsApp status, and permissions health. Patient identities, phone numbers, medication details, and communication content stay inside the tenant workspace.
+            </p>
+          </div>
+          <div className="grid gap-3">
+            {onboarding.submissionPolicy.blockingReasons.length > 0 ? (
+              onboarding.submissionPolicy.blockingReasons.map((item) => (
+                <div key={item} className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                  {item}
+                </div>
+              ))
+            ) : (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                This tenant satisfies the current {onboarding.submissionPolicy.label.toLowerCase()} and can move through review.
+              </div>
+            )}
+          </div>
+          <form action={reviewOnboarding} className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5">
+            <label className="grid gap-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Review notes</span>
+              <textarea
+                name="reviewNotes"
+                defaultValue={onboarding.onboarding.reviewNotes ?? ""}
+                rows={5}
+                className="focus-ring w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-navy-950"
+                placeholder="Add platform review notes, missing evidence, or go-live conditions."
+              />
+            </label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button name="decision" value="UNDER_REVIEW" className="focus-ring rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700">
+                Start review
+              </button>
+              <button name="decision" value="REQUEST_CHANGES" className="focus-ring rounded-lg bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800">
+                Request changes
+              </button>
+              <button name="decision" value="APPROVE" className="focus-ring rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white">
+                Approve go-live
+              </button>
+              <button name="decision" value="BLOCK" className="focus-ring rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white">
+                Mark blocked
+              </button>
+            </div>
+          </form>
+          {onboarding.onboarding.submittedAt ? (
+            <div className="rounded-lg border border-slate-100 p-4 text-sm text-slate-600">
+              Submitted: {onboarding.onboarding.submittedAt.toLocaleString()}
+              {onboarding.onboarding.reviewedAt ? ` / Reviewed: ${onboarding.onboarding.reviewedAt.toLocaleString()}` : ""}
+              {onboarding.onboarding.activatedAt ? ` / Activated: ${onboarding.onboarding.activatedAt.toLocaleString()}` : ""}
+            </div>
+          ) : null}
+        </Panel>
+      </section>
+
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Metric label="Operating units" value={tenant._count.operatingUnits} />
         <Metric label="Branches" value={tenant._count.branches} />
@@ -169,10 +278,10 @@ export default async function PlatformTenantDetailPage({
 }
 
 function Badge({ children }: { children: ReactNode }) {
-  return <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">{children}</span>;
+  return <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">{typeof children === "string" ? children.replace(/_/g, " ") : children}</span>;
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+function Metric({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
@@ -192,6 +301,14 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
 
 function Empty({ children }: { children: ReactNode }) {
   return <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">{children}</p>;
+}
+
+function Flash({ children, tone }: { children: ReactNode; tone: "success" | "error" }) {
+  return (
+    <div className={`rounded-xl border p-4 text-sm font-medium ${tone === "success" ? "border-emerald-100 bg-emerald-50 text-emerald-900" : "border-rose-100 bg-rose-50 text-rose-900"}`}>
+      {children}
+    </div>
+  );
 }
 
 function getProvisioningStatus(input: { activeOwner: boolean; pendingInvitation: boolean; complete: boolean }) {

@@ -432,6 +432,26 @@ enum TenantSupportAccessStatus {
   REVOKED
 }
 
+enum TenantOnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  WAITING_FOR_TENANT
+  READY_FOR_REVIEW
+  UNDER_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+  ACTIVE
+  BLOCKED
+}
+
+enum TenantOnboardingStepStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETE
+  BLOCKED
+  SKIPPED
+}
+
 enum TenantUserInvitationStatus {
   PENDING
   ACCEPTED
@@ -503,6 +523,8 @@ model Tenant {
   operatingUnits      OperatingUnit[]
   supportRequests     TenantSupportAccessRequest[]
   userInvitations     TenantUserInvitation[]
+  onboarding          TenantOnboarding?
+  onboardingSteps     TenantOnboardingStep[]
   auditLogs           AuditLog[]
 
   @@index([status, plan])
@@ -1188,6 +1210,7 @@ model AppUser {
   updatedAt              DateTime                  @updatedAt
   unitAccess             UserOperatingUnitAccess[]
   sessions               AppSession[]
+  completedOnboardingSteps TenantOnboardingStep[]
 
   @@index([status, role])
   @@index([tenantId])
@@ -1235,6 +1258,7 @@ model PlatformUser {
   sessions         PlatformSession[]
   supportRequests  TenantSupportAccessRequest[]
   tenantUserInvitations TenantUserInvitation[]
+  reviewedOnboardings TenantOnboarding[] @relation("TenantOnboardingReviewer")
 
   @@index([status, role])
 }
@@ -1272,6 +1296,54 @@ model TenantSupportAccessRequest {
   @@index([tenantId, status])
   @@index([requestedByPlatformUserId])
   @@index([expiresAt])
+}
+
+model TenantOnboarding {
+  id                       String                  @id @default(cuid())
+  tenantId                 String                  @unique
+  tenant                   Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  status                   TenantOnboardingStatus  @default(NOT_STARTED)
+  readinessScore           Int                     @default(0)
+  currentStepKey           String                  @default("OWNER_ACCOUNT")
+  startedAt                DateTime                @default(now())
+  submittedAt              DateTime?
+  reviewedAt               DateTime?
+  activatedAt              DateTime?
+  blockedAt                DateTime?
+  reviewNotes              String?
+  reviewedByPlatformUserId String?
+  reviewedByPlatformUser   PlatformUser?           @relation("TenantOnboardingReviewer", fields: [reviewedByPlatformUserId], references: [id], onDelete: SetNull)
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
+  steps                    TenantOnboardingStep[]
+
+  @@index([status, readinessScore])
+  @@index([reviewedByPlatformUserId])
+}
+
+model TenantOnboardingStep {
+  id                String                     @id @default(cuid())
+  onboardingId      String
+  onboarding        TenantOnboarding           @relation(fields: [onboardingId], references: [id], onDelete: Cascade)
+  tenantId          String
+  tenant            Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  key               String
+  title             String
+  status            TenantOnboardingStepStatus @default(NOT_STARTED)
+  required          Boolean                    @default(true)
+  sortOrder         Int
+  completedAt       DateTime?
+  completedByUserId String?
+  completedByUser   AppUser?                   @relation(fields: [completedByUserId], references: [id], onDelete: SetNull)
+  skippedAt         DateTime?
+  metadata          Json?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  @@unique([onboardingId, key])
+  @@index([tenantId, key])
+  @@index([status, sortOrder])
+  @@index([completedByUserId])
 }
 
 model TenantUserInvitation {

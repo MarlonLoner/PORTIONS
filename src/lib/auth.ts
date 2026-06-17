@@ -95,12 +95,14 @@ const rolePermissions: Record<UserRole, PermissionKey[]> = {
 
 const pagePermissions: Array<{ prefix: string; permission: PermissionKey }> = [
   { prefix: "/admin/users", permission: "manageUsers" },
+  { prefix: "/admin/staff", permission: "manageUsers" },
   { prefix: "/admin/operating-units", permission: "manageOperatingUnits" },
   { prefix: "/executive-pack", permission: "viewExecutivePack" },
   { prefix: "/settings", permission: "manageSettings" },
   { prefix: "/imports", permission: "importData" },
   { prefix: "/pilot-command", permission: "managePilot" },
   { prefix: "/pilot-requests", permission: "managePilot" },
+  { prefix: "/onboarding", permission: "managePilot" },
   { prefix: "/patients", permission: "managePatients" },
   { prefix: "/follow-ups", permission: "manageFollowUps" },
   { prefix: "/orders", permission: "manageOrders" },

@@ -23,6 +23,8 @@ const tenantTables = [
   "Notification",
   "Communication",
   "CommunicationActivity",
+  "TenantOnboarding",
+  "TenantOnboardingStep",
   "Event",
   "EventChecklistItem",
   "EventExpense",
@@ -113,7 +115,8 @@ async function main() {
     ["EventExpense", "Event", "eventId"],
     ["EventActivity", "Event", "eventId"],
     ["EventReview", "Event", "eventId"],
-    ["CommunicationActivity", "Communication", "communicationId"]
+    ["CommunicationActivity", "Communication", "communicationId"],
+    ["TenantOnboardingStep", "TenantOnboarding", "onboardingId"]
   ] as const;
 
   for (const [child, parent, fk] of relationChecks) {

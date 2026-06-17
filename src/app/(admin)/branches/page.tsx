@@ -109,11 +109,11 @@ export default async function BranchesPage() {
           ) : (
             <TenantEmptyState
               title="No branches have been configured yet."
-              description="Create your first branch to begin tracking stock, patients, orders and branch performance."
+              description="Create your first branch to begin tracking stock, patients, orders, and branch performance. PORTIONS will move onboarding forward automatically once the branch exists."
               primaryActionLabel="Create first branch"
               primaryActionHref="/branches/new"
-              secondaryActionLabel="Review operating units"
-              secondaryActionHref="/admin/operating-units"
+              secondaryActionLabel="Open onboarding"
+              secondaryActionHref="/onboarding"
               icon={Building2}
             />
           )}

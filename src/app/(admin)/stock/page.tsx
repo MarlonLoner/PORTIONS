@@ -195,7 +195,7 @@ export default async function StockPage({ searchParams }: { searchParams: Search
         {stockItems.length === 0 ? (
           <TenantEmptyState
             title="No stock records yet."
-            description="Add a stock item manually or import a stock sheet to unlock Stock Intelligence."
+            description="Add a stock item manually or import a stock sheet to unlock Stock Intelligence. Stock-data readiness updates automatically after the first valid records land."
             primaryActionLabel="Add stock item"
             primaryActionHref="/stock/new"
             secondaryActionLabel="Import stock"

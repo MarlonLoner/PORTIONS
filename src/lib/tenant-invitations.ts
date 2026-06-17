@@ -13,6 +13,7 @@ import {
 import type { CurrentPlatformUser } from "@/lib/platform-auth";
 import { createUserSession, hashPassword, validatePasswordStrength } from "@/lib/auth";
 import { createManualInvitationDelivery } from "@/lib/invitation-delivery";
+import { getOrCreateTenantOnboarding } from "@/lib/onboarding";
 import { prisma } from "@/lib/prisma";
 
 const INVITATION_DAYS = 7;
@@ -249,6 +250,8 @@ export async function acceptTenantOwnerInvitation(token: string, input: { passwo
       })),
       skipDuplicates: true
     });
+
+    await getOrCreateTenantOnboarding(invitation.tenantId, tx);
 
     await tx.tenantUserInvitation.update({
       where: { id: invitation.id },

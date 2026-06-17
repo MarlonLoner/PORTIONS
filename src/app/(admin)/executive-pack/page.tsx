@@ -31,10 +31,12 @@ import { formatCurrency } from "@/lib/format";
 import { getEscalationAiSummary, getNotificationSummary } from "@/lib/notifications";
 import { getEventFundingSummary, getEventReadinessSummary } from "@/lib/events";
 import { getCommunicationMetrics } from "@/lib/communications";
+import { recordOperationalOutput } from "@/lib/onboarding";
 
 export const dynamic = "force-dynamic";
 
 export default async function ExecutivePackPage() {
+  await recordOperationalOutput("EXECUTIVE_PACK");
   const data = await getExecutivePackData();
   const communicationMetrics = await getCommunicationMetrics();
   const metadata = getPrintMetadata(data);

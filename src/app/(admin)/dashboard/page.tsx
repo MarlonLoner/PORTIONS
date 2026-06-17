@@ -1,4 +1,4 @@
-import { ImportBatchStatus } from "@prisma/client";
+import { ImportBatchStatus, TenantOnboardingStatus } from "@prisma/client";
 import {
   Activity,
   AlertTriangle,
@@ -40,8 +40,9 @@ import {
 import { getEscalationAiSummary, getNotificationSummary } from "@/lib/notifications";
 import { getCommunicationMetrics } from "@/lib/communications";
 import { getEventMetrics, getEventNextAction, getEventReadinessSummary } from "@/lib/events";
-import { canImportData, canManageSettings, canManageUsers, getCurrentAccessUser } from "@/lib/auth";
+import { canImportData, canManageSettings, canManageUsers, canViewPage, getCurrentAccessUser } from "@/lib/auth";
 import { getAdminControlCenterMetrics } from "@/lib/admin-user-creation";
+import { evaluateTenantOnboarding } from "@/lib/onboarding";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -52,9 +53,16 @@ export default async function DashboardPage() {
   const showAdminControl = user ? canManageUsers(user) || canManageSettings(user) : false;
   const showImportCommand = user ? canImportData(user) : false;
   const adminMetrics = showAdminControl ? await getAdminControlCenterMetrics() : null;
+  const onboardingSummary =
+    user?.tenantId && canViewPage(user, "/onboarding")
+      ? await evaluateTenantOnboarding(user.tenantId)
+      : null;
   const setupCounts = user?.tenantId ? await getTenantSetupCounts(user.tenantId) : null;
   const importSnapshot = showImportCommand && user?.tenantId ? await getDashboardImportSnapshot(user.tenantId) : null;
-  const showSetupPanel = setupCounts ? setupCounts.branches === 0 || setupCounts.stockItems === 0 || setupCounts.patients === 0 || setupCounts.staffMembers === 0 || setupCounts.orders === 0 : false;
+  const showSetupPanel =
+    !onboardingSummary && setupCounts
+      ? setupCounts.branches === 0 || setupCounts.stockItems === 0 || setupCounts.patients === 0 || setupCounts.staffMembers === 0 || setupCounts.orders === 0
+      : false;
   const communicationMetrics = await getCommunicationMetrics();
   const maxRevenue = Math.max(...data.revenueByBranch.map((branch) => branch.revenue), 1);
   const topUrgency = [...data.followUpUrgency].sort((a, b) => b.count - a.count)[0];
@@ -139,6 +147,60 @@ export default async function DashboardPage() {
           </div>
         </div>
       </section>
+
+      {onboardingSummary ? (
+        onboardingSummary.status === TenantOnboardingStatus.ACTIVE ? (
+          <section className="rounded-lg border border-emerald-100 bg-emerald-50 p-5 shadow-soft">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">Launch complete</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy-950">PORTIONS is active for this pharmacy</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-emerald-950">
+                  Activation has been approved. Readiness is {onboardingSummary.readinessScore}% and the current rollout focus is {onboardingSummary.currentStep.title.toLowerCase()}.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link href="/onboarding" className="focus-ring rounded-lg bg-navy-950 px-4 py-2.5 text-sm font-semibold text-white">View onboarding history</Link>
+                <Link href={onboardingSummary.nextRecommendedAction.href} className="focus-ring rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 ring-1 ring-emerald-100">
+                  {onboardingSummary.nextRecommendedAction.label}
+                </Link>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <SetupCard title="Readiness score" status={`${onboardingSummary.readinessScore}%`} href="/onboarding" detail="Persistent activation evidence" icon={<Target className="h-4 w-4" />} tone="success" />
+              <SetupCard title="Active users" status={String(onboardingSummary.counts.activeUsers)} href="/admin/users" detail="Tenant logins in operation" icon={<UsersRound className="h-4 w-4" />} tone="success" />
+              <SetupCard title="Imported batches" status={String(onboardingSummary.counts.importedBatches)} href="/imports/batches" detail="Approved and executed data loads" icon={<FileSpreadsheet className="h-4 w-4" />} tone="success" />
+              <SetupCard title="Open rollout gaps" status={String(onboardingSummary.blockers.length)} href="/onboarding" detail={onboardingSummary.blockers[0] ?? "No critical activation gaps remain."} icon={<AlertTriangle className="h-4 w-4" />} tone={onboardingSummary.blockers.length > 0 ? "warning" : "success"} />
+            </div>
+          </section>
+        ) : (
+          <section className="rounded-lg border border-clinical-200 bg-clinical-50 p-5 shadow-soft">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-clinical-800">Launch your pharmacy workspace</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy-950">{onboardingSummary.tenant.name} onboarding is {onboardingSummary.readinessScore}% ready</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-clinical-900">
+                  Current step: {onboardingSummary.currentStep.title}. {onboardingSummary.blockers[0] ?? onboardingSummary.submissionPolicy.explanation}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link href="/onboarding" className="focus-ring rounded-lg bg-navy-950 px-4 py-2.5 text-sm font-semibold text-white">Continue onboarding</Link>
+                <Link href={onboardingSummary.nextRecommendedAction.href} className="focus-ring rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 ring-1 ring-clinical-100">
+                  {onboardingSummary.nextRecommendedAction.label}
+                </Link>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+              <SetupCard title="Readiness score" status={`${onboardingSummary.readinessScore}%`} href="/onboarding" detail="Explainable launch score" icon={<Target className="h-4 w-4" />} tone="warning" />
+              <SetupCard title="Current step" status={onboardingSummary.currentStep.title} href="/onboarding" detail="Most important next move" icon={<ClipboardCheck className="h-4 w-4" />} tone="warning" />
+              <SetupCard title="Required complete" status={`${onboardingSummary.completedRequiredSteps}/${onboardingSummary.totalRequiredSteps}`} href="/onboarding" detail="Required steps evidenced" icon={<CheckCircle2 className="h-4 w-4" />} tone={onboardingSummary.completedRequiredSteps === onboardingSummary.totalRequiredSteps ? "success" : "warning"} />
+              <SetupCard title="Branches live" status={String(onboardingSummary.counts.branches)} href="/branches/new" detail="Physical operating footprint" icon={<Building2 className="h-4 w-4" />} tone={onboardingSummary.counts.branches > 0 ? "success" : "warning"} />
+              <SetupCard title="Active users" status={String(onboardingSummary.counts.activeUsers)} href="/admin/staff/new" detail="Owner plus executing staff" icon={<UsersRound className="h-4 w-4" />} tone={onboardingSummary.counts.activeUsers > 1 ? "success" : "warning"} />
+              <SetupCard title="Open blockers" status={String(onboardingSummary.blockers.length)} href="/onboarding" detail={onboardingSummary.blockers[0] ?? "No blocker is stopping submission right now."} icon={<AlertTriangle className="h-4 w-4" />} tone={onboardingSummary.blockers.length > 0 ? "warning" : "success"} />
+            </div>
+          </section>
+        )
+      ) : null}
 
       {showSetupPanel && setupCounts ? (
         <section className="rounded-lg border border-clinical-200 bg-clinical-50 p-5 shadow-soft">
@@ -633,8 +695,22 @@ async function getDashboardImportSnapshot(tenantId: string) {
   return { totalBatches, needsReview, imported, recentBatches };
 }
 
-function SetupCard({ title, status, detail, href, icon }: { title: string; status: string; detail: string; href: string; icon: ReactNode }) {
-  const complete = ["Complete", "Ready", "Started"].includes(status);
+function SetupCard({
+  title,
+  status,
+  detail,
+  href,
+  icon,
+  tone
+}: {
+  title: string;
+  status: string;
+  detail: string;
+  href: string;
+  icon: ReactNode;
+  tone?: "success" | "warning";
+}) {
+  const complete = tone ? tone === "success" : ["Complete", "Ready", "Started"].includes(status);
   return (
     <Link href={href} className="focus-ring rounded-lg border border-clinical-100 bg-white p-4 hover:bg-slate-50">
       <div className={complete ? "inline-flex rounded-lg bg-emerald-50 p-2 text-emerald-700 ring-1 ring-emerald-100" : "inline-flex rounded-lg bg-amber-50 p-2 text-amber-700 ring-1 ring-amber-100"}>{icon}</div>

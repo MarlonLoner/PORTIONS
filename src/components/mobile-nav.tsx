@@ -57,7 +57,13 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function MobileNav({ visibleHrefs }: { visibleHrefs?: string[] }) {
+export function MobileNav({
+  visibleHrefs,
+  navBadges
+}: {
+  visibleHrefs?: string[];
+  navBadges?: Record<string, string>;
+}) {
   const pathname = usePathname();
   const items = visibleHrefs ? navItems.filter((item) => visibleHrefs.includes(item.href)) : navItems;
 
@@ -79,6 +85,11 @@ export function MobileNav({ visibleHrefs }: { visibleHrefs?: string[] }) {
             >
               <Icon className="h-3.5 w-3.5" aria-hidden="true" />
               {item.label}
+              {navBadges?.[item.href] ? (
+                <span className={clsx("rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em]", active ? "bg-white/15 text-white" : "bg-white text-slate-700")}>
+                  {navBadges[item.href]}
+                </span>
+              ) : null}
             </Link>
           );
         })}

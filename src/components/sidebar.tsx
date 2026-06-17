@@ -60,10 +60,12 @@ function isActivePath(pathname: string, href: string) {
 
 export function Sidebar({
   visibleHrefs,
-  user
+  user,
+  navBadges
 }: {
   visibleHrefs?: string[];
   user?: { name: string; role: string; isDemo: boolean; primaryOperatingUnitName: string | null };
+  navBadges?: Record<string, string>;
 }) {
   const pathname = usePathname();
   const items = visibleHrefs ? navItems.filter((item) => visibleHrefs.includes(item.href)) : navItems;
@@ -96,7 +98,17 @@ export function Sidebar({
               )}
             >
               <Icon className="h-4 w-4" aria-hidden="true" />
-              {item.label}
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              {navBadges?.[item.href] ? (
+                <span
+                  className={clsx(
+                    "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
+                    active ? "bg-navy-950/10 text-navy-950" : "bg-white/10 text-clinical-100"
+                  )}
+                >
+                  {navBadges[item.href]}
+                </span>
+              ) : null}
             </Link>
           );
         })}

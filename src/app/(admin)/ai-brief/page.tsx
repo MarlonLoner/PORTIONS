@@ -40,6 +40,7 @@ import {
 import { getEscalationAiSummary, getNotificationSummary } from "@/lib/notifications";
 import { getCommunicationMetrics } from "@/lib/communications";
 import { getEventFundingSummary, getEventReadinessSummary } from "@/lib/events";
+import { recordOperationalOutput } from "@/lib/onboarding";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,7 @@ const healthClasses: Record<NetworkHealthStatus, string> = {
 };
 
 export default async function AiBriefPage() {
+  await recordOperationalOutput("AI_BRIEF");
   const briefData = await getAiBriefData();
   const communicationMetrics = await getCommunicationMetrics();
   const intelligence = {
